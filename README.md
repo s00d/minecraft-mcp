@@ -21,8 +21,8 @@ run commands, control time, record packets, copy builds as schematics and run sc
 
 **1. Download.** Open the [latest release](../../releases/latest) and download the jar that matches your
 loader and Minecraft version: `minecraft_mcp-<loader>-<mod version>+<minecraft>.jar`, for example
-`minecraft_mcp-fabric-0.2.0+1.21.11.jar`, `minecraft_mcp-neoforge-0.2.0+26.3.jar` or
-`minecraft_mcp-forge-0.2.0+1.21.1.jar`. On **Quilt** use the Fabric jar: Quilt Loader runs it with Fabric API,
+`minecraft_mcp-fabric-0.3.0+1.21.11.jar`, `minecraft_mcp-neoforge-0.3.0+26.3.jar` or
+`minecraft_mcp-forge-0.3.0+1.21.1.jar`. On **Quilt** use the Fabric jar: Quilt Loader runs it with Fabric API,
 and the mod reports `quilt` as its loader. Versions are listed [below](#supported-versions).
 
 **2. Put it in `mods/`** of the game (or server) directory:
@@ -265,7 +265,7 @@ compilation fails.
 as a GitHub release named after the tag, with that tag as the mod version:
 
 ```bash
-git tag 0.2.0 && git push origin 0.2.0
+git tag 0.3.0 && git push origin 0.3.0
 ```
 
 A manual run (`workflow_dispatch`) only builds and uploads the jars as an artifact.
