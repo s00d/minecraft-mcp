@@ -124,7 +124,7 @@ public interface MinecraftBridge {
                 "Condition '" + normalized + "' evaluated " + attempts + " times, never succeeded; last error: " + lastError, lastError);
         }
         if (lastError != null) {
-            Log.LOG.warn("wait_until last condition evaluation error for '" + normalized + "': " + lastError);
+            Log.warn("wait_until last condition evaluation error for '" + normalized + "': " + lastError);
         }
         return false;
     }

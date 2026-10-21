@@ -72,7 +72,7 @@ public final class NeoForgeMinecraftMcpClientMod {
                             response -> context.reply(new NeoForgeStringPayload(NeoForgeStringPayload.CLIENT_RESPONSE, response))),
                     (context, text) -> clientPluginHandler.receiveResponse(text,
                             NeoForgeClientTrust.currentServerCaller(context)));
-            Log.LOG.info("NeoForge MCP server started on port " + clientEndpoint.port());
+            Log.info("NeoForge MCP server started on port " + clientEndpoint.port());
         } catch (Exception e) { throw new RuntimeException("Failed to start Minecraft MCP", e); }
     }
 

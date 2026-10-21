@@ -25,7 +25,7 @@ public final class McpConfigs {
     public static void report() {
         McpConfig config = current();
         for (String line : config.report()) {
-            Log.LOG.info(line);
+            Log.info(line);
         }
         List<String> problems = config.problems();
         if (!problems.isEmpty()) {

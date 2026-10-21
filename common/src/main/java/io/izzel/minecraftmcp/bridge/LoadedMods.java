@@ -18,4 +18,10 @@ public final class LoadedMods {
     public static List<Map<String, Object>> list() {
         return source.get();
     }
+
+    /** The version of one mod, or "dev" when the loader does not list it. */
+    public static String version(String modId) {
+        return list().stream().filter(mod -> modId.equals(mod.get("id"))).map(mod -> String.valueOf(mod.get("version")))
+            .findFirst().orElse("dev");
+    }
 }

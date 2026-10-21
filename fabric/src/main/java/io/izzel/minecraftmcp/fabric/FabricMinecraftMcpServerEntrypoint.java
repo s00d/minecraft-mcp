@@ -67,7 +67,7 @@ public final class FabricMinecraftMcpServerEntrypoint implements DedicatedServer
                         });
                 server.getPlayerList().getPlayers().forEach(player ->
                         RemoteMcpProxies.rememberClientName(player.getUUID(), MinecraftCompat.profileName(player)));
-                Log.LOG.info("Fabric dedicated MCP server started on port " + endpoint.port());
+                Log.info("Fabric dedicated MCP server started on port " + endpoint.port());
             } catch (Exception e) {
                 throw new RuntimeException("Failed to start Minecraft MCP dedicated server", e);
             }

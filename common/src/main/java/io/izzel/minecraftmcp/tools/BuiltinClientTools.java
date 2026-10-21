@@ -120,11 +120,15 @@ public final class BuiltinClientTools {
                 bridge.setKeyDown(key, true);
                 return null;
             }).get(10, TimeUnit.SECONDS);
-            bridge.waitTicks(ticks);
-            bridge.submit(() -> {
-                bridge.setKeyDown(key, false);
-                return null;
-            }).get(10, TimeUnit.SECONDS);
+            try {
+                bridge.waitTicks(ticks);
+            } finally {
+                // release even when the wait fails, or the key stays held down in the game
+                bridge.submit(() -> {
+                    bridge.setKeyDown(key, false);
+                    return null;
+                }).get(10, TimeUnit.SECONDS);
+            }
             return Map.of("status", "held", "key", key, "ticks", ticks);
         }));
         registry.register(read(tool("mc.client.ticks.wait", "Wait client ticks", List.of(TICKS), args -> {

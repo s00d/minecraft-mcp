@@ -46,7 +46,7 @@ public final class ConditionPropertyProviders {
                 if (provider.sides().contains(side)) provider.register(registry);
             });
         } catch (ServiceConfigurationError e) {
-            Log.LOG.warn("Failed to load condition property provider: " + e);
+            Log.warn("Failed to load condition property provider: " + e);
         }
         return registry;
     }

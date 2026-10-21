@@ -116,7 +116,7 @@ public final class NeoForgeMinecraftMcpMod {
                     });
             event.getServer().getPlayerList().getPlayers().forEach(player ->
                     RemoteMcpProxies.rememberClientName(player.getUUID(), MinecraftCompat.profileName(player)));
-            Log.LOG.info("NeoForge dedicated MCP server started on port " + serverEndpoint.port());
+            Log.info("NeoForge dedicated MCP server started on port " + serverEndpoint.port());
         } catch (Exception e) {
             throw new RuntimeException("Failed to start Minecraft MCP dedicated server", e);
         }

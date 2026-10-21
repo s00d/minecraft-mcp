@@ -38,7 +38,7 @@ public final class PacketRecorderNettyHandler extends ChannelDuplexHandler {
         } catch (RuntimeException e) {
             if (!recorderErrorLogged) {
                 recorderErrorLogged = true;
-                Log.LOG.warn("packet recorder failed (suppressed, packets keep flowing): " + e);
+                Log.warn("packet recorder failed (suppressed, packets keep flowing): " + e);
             }
         }
     }

@@ -38,7 +38,7 @@ public final class JsonRpcHandler {
     private final String serverVersion;
 
     public JsonRpcHandler(ToolRegistry registry) {
-        this(registry, "0.1.0");
+        this(registry, "dev");
     }
 
     public JsonRpcHandler(ToolRegistry registry, String serverVersion) {

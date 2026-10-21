@@ -145,7 +145,7 @@ final class NeoForgeMcpConfig {
             }
         }
         if (!missing.isEmpty()) {
-            Log.LOG.warn(FILE_NAME + " does not define " + missing
+            Log.warn(FILE_NAME + " does not define " + missing
                 + "; those can only be set from a system property or the environment");
         }
     }
@@ -174,7 +174,7 @@ final class NeoForgeMcpConfig {
         try {
             return PermissionAPI.getPermission(player, REMOTE_CALL);
         } catch (RuntimeException e) {
-            Log.LOG.warn("could not resolve " + McpPermissions.REMOTE_CALL_NEOFORGE
+            Log.warn("could not resolve " + McpPermissions.REMOTE_CALL_NEOFORGE
                 + " for " + MinecraftCompat.profileName(player) + ", refusing: " + e);
             return false;
         }
@@ -209,7 +209,7 @@ final class NeoForgeMcpConfig {
             try {
                 return value.get();
             } catch (IllegalStateException e) {
-                Log.LOG.warn(String.join(".", path)
+                Log.warn(String.join(".", path)
                     + " was read before " + FILE_NAME + " loaded; using the built-in default");
                 return null;
             }

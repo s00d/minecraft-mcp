@@ -29,7 +29,7 @@ public final class FabricMinecraftMcpEntrypoint implements ClientModInitializer 
             clientEndpoint = MinecraftMcpBootstrap.start(new FabricBridge());
             clientPluginHandler = new McpPluginMessageHandler(clientEndpoint.registry(),
                     McpConfigs::current, clientEndpoint.workers());
-            Log.LOG.info("Fabric MCP server started on port " + clientEndpoint.port());
+            Log.info("Fabric MCP server started on port " + clientEndpoint.port());
         } catch (Exception e) { throw new RuntimeException("Failed to start Minecraft MCP", e); }
     }
     private static void registerRemoteMcpPluginMessages() {
