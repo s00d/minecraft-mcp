@@ -23,8 +23,7 @@ class ToolRegistryFutureResultTest {
         ToolRegistry registry = new ToolRegistry();
         AtomicBoolean cancelled = new AtomicBoolean(false);
         registry.register(simple("never", args -> {
-            FutureResult<Object> result = new FutureResult<>(r -> {
-            }, Runnable::run);
+            FutureResult<Object> result = new FutureResult<>(Runnable::run);
             result.toCompletableFuture().whenComplete((value, throwable) -> cancelled.set(result.toCompletableFuture().isCancelled()));
             return result;
         }));

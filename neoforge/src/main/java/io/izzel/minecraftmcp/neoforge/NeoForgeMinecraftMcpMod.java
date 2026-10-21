@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.neoforge;
 
+import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.compat.MinecraftCompat;
 import io.izzel.minecraftmcp.MinecraftMcpBootstrap;
 import io.izzel.minecraftmcp.bridge.LoadedMods;
@@ -115,7 +116,7 @@ public final class NeoForgeMinecraftMcpMod {
                     });
             event.getServer().getPlayerList().getPlayers().forEach(player ->
                     RemoteMcpProxies.rememberClientName(player.getUUID(), MinecraftCompat.profileName(player)));
-            System.out.println("[Minecraft MCP] NeoForge dedicated MCP server started on port " + serverEndpoint.port());
+            Log.LOG.info("NeoForge dedicated MCP server started on port " + serverEndpoint.port());
         } catch (Exception e) {
             throw new RuntimeException("Failed to start Minecraft MCP dedicated server", e);
         }

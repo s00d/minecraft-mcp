@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.condition.property;
 
+import io.izzel.minecraftmcp.util.Log;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
@@ -45,7 +46,7 @@ public final class ConditionPropertyProviders {
                 if (provider.sides().contains(side)) provider.register(registry);
             });
         } catch (ServiceConfigurationError e) {
-            System.err.println("[Minecraft MCP] Failed to load condition property provider: " + e);
+            Log.LOG.warn("Failed to load condition property provider: " + e);
         }
         return registry;
     }

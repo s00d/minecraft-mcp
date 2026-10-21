@@ -45,13 +45,29 @@ public final class ChatLog {
         return lastSequence;
     }
 
-    /** Up to {@code limit} newest entries after {@code since} that match. */
-    public synchronized List<Entry> read(long since, int limit, Predicate<String> filter) {
+    /**
+     * The oldest {@code limit} matching entries after {@code since}. {@code last} is the cursor for the next read:
+     * everything up to it has been seen, so paging with it never skips or repeats a line. {@code more} says another
+     * page is waiting; {@code missed} counts lines that fell out of the log before they were read.
+     */
+    public record Page(List<Entry> entries, long last, boolean more, long missed) {
+    }
+
+    public synchronized Page read(long since, int limit, Predicate<String> filter) {
         List<Entry> matched = new ArrayList<>();
+        long last = lastSequence;
+        boolean more = false;
         for (Entry entry : entries) {
-            if (entry.sequence > since && filter.test(entry.text)) matched.add(entry);
+            if (entry.sequence <= since || !filter.test(entry.text)) continue;
+            if (matched.size() == Math.max(0, limit)) {
+                more = true;
+                last = matched.isEmpty() ? since : matched.get(matched.size() - 1).sequence;
+                break;
+            }
+            matched.add(entry);
         }
-        return matched.subList(Math.max(0, matched.size() - Math.max(0, limit)), matched.size());
+        long oldest = entries.isEmpty() ? lastSequence + 1 : entries.peekFirst().sequence;
+        return new Page(List.copyOf(matched), last, more, Math.max(0, oldest - 1 - since));
     }
 
     /** The first entry after {@code since} that matches, waiting up to {@code timeoutMs}; null on timeout. */

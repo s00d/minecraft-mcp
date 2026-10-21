@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -85,24 +84,11 @@ class RemoteMcpProxiesTest {
         UUID player = UUID.randomUUID();
         RemoteMcpProxies.rememberClientName(player, "Dev");
         RemoteMcpProxy proxy = RemoteMcpProxies.findClient(player);
-        var failure = new AtomicReference<Exception>();
-        var sent = new AtomicReference<String>();
-        Thread caller = new Thread(() -> {
-            try {
-                proxy.call("mc.client.state", Map.of(), sent::set, 30_000);
-            } catch (Exception e) {
-                failure.set(e);
-            }
-        });
-        caller.setDaemon(true);
-        caller.start();
-        for (int i = 0; i < 200 && sent.get() == null; i++) {
-            Thread.sleep(10);
-        }
+        PendingCall call = new PendingCall(proxy, "mc.client.state", 30_000);
+        call.id();
 
         RemoteMcpProxies.forgetClient(player);
-        caller.join(5_000);
 
-        assertNotNull(failure.get(), "a disconnect has to fail the call, not leave it waiting");
+        assertNotNull(call.failure(), "a disconnect has to fail the call, not leave it waiting");
     }
 }

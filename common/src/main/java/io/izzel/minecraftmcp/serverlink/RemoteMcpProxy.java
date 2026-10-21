@@ -35,7 +35,7 @@ public final class RemoteMcpProxy {
         message.put("tool", tool);
         message.put("arguments", arguments == null ? Map.of() : arguments);
         try {
-            sender.send(Json.stringify(message));
+            PayloadChunks.send(Json.stringify(message), sender::send);
             return future.get(Math.max(1, timeoutMs), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             pending.remove(id);

@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -24,25 +23,10 @@ class RemoteMcpProxyTest {
         ChannelCaller caller = new ChannelCaller.Player(UUID.randomUUID(), "Tester", true, "minecraft_mcp:remote.call");
         RemoteMcpProxy client = new RemoteMcpProxy();
 
-        AtomicReference<String> clientResponse = new AtomicReference<>();
-        AtomicReference<Object> result = new AtomicReference<>();
-        Thread thread = new Thread(() -> {
-            try {
-                result.set(client.call("mc.server.state", Map.of(), payload ->
-                    server.receiveRequest(payload, caller, clientResponse::set), 1000));
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        });
-        thread.start();
-        for (int i = 0; i < 100 && clientResponse.get() == null; i++) {
-            Thread.sleep(10);
-        }
-        client.receiveResponse(clientResponse.get());
-        thread.join(1000);
+        Object result = client.call("mc.server.state", Map.of(),
+            payload -> server.receiveRequest(payload, caller, client::receiveResponse), 1000);
 
-        assertTrue(result.get() instanceof Map<?, ?>);
-        Map<?, ?> resultMap = (Map<?, ?>) result.get();
+        Map<?, ?> resultMap = assertInstanceOf(Map.class, result);
         assertEquals(true, resultMap.get("running"));
         assertEquals(2, ((Number) resultMap.get("players")).intValue());
     }
@@ -50,52 +34,26 @@ class RemoteMcpProxyTest {
     @Test
     void unreadableRepliesAreDroppedRatherThanThrown() throws Exception {
         RemoteMcpProxy proxy = new RemoteMcpProxy();
-        AtomicReference<String> sent = new AtomicReference<>();
-        AtomicReference<Exception> failure = new AtomicReference<>();
-        Thread caller = new Thread(() -> {
-            try {
-                proxy.call("mc.server.state", Map.of(), sent::set, 400);
-            } catch (Exception e) {
-                failure.set(e);
-            }
-        });
-        caller.setDaemon(true);
-        caller.start();
-        for (int i = 0; i < 200 && sent.get() == null; i++) {
-            Thread.sleep(10);
-        }
+        PendingCall call = new PendingCall(proxy, "mc.server.state", 400);
+        call.id();
 
         for (String payload : List.of("{", "[".repeat(32767), "tru", "", "[1,2,3]", "{\"type\":\"other\"}")) {
             assertDoesNotThrow(() -> proxy.receiveResponse(payload),
                 () -> "receiveResponse threw on " + payload.substring(0, Math.min(8, payload.length())));
         }
 
-        caller.join(2_000);
-        assertNotNull(failure.get(), "an unreadable reply must not complete a call");
+        assertNotNull(call.failure(), "an unreadable reply must not complete a call");
     }
 
     @Test
     void failPendingUnblocksCallsInsteadOfLettingThemTimeOut() throws Exception {
         RemoteMcpProxy proxy = new RemoteMcpProxy();
-        AtomicReference<Exception> failure = new AtomicReference<>();
-        AtomicReference<String> sent = new AtomicReference<>();
-        Thread caller = new Thread(() -> {
-            try {
-                proxy.call("mc.server.state", Map.of(), sent::set, 30_000);
-            } catch (Exception e) {
-                failure.set(e);
-            }
-        });
-        caller.setDaemon(true);
-        caller.start();
-        for (int i = 0; i < 200 && sent.get() == null; i++) {
-            Thread.sleep(10);
-        }
+        PendingCall call = new PendingCall(proxy, "mc.server.state", 30_000);
+        call.id();
 
         proxy.failPending();
-        caller.join(5_000);
 
-        assertNotNull(failure.get(), "a pending call should fail fast when the peer goes away");
+        assertNotNull(call.failure(), "a pending call should fail fast when the peer goes away");
     }
 
     static class TestServerBridge extends FakeServerBridge {

@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.packet;
 
+import io.izzel.minecraftmcp.util.Log;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -37,7 +38,7 @@ public final class PacketRecorderNettyHandler extends ChannelDuplexHandler {
         } catch (RuntimeException e) {
             if (!recorderErrorLogged) {
                 recorderErrorLogged = true;
-                System.err.println("[Minecraft MCP] packet recorder failed (suppressed, packets keep flowing): " + e);
+                Log.LOG.warn("packet recorder failed (suppressed, packets keep flowing): " + e);
             }
         }
     }

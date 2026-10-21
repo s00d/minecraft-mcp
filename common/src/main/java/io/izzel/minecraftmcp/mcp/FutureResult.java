@@ -13,29 +13,20 @@ public final class FutureResult<T> {
         this.callbackExecutor = Objects.requireNonNull(callbackExecutor, "callbackExecutor");
     }
 
-    public FutureResult(Consumer<Runnable> starter, Executor callbackExecutor) {
-        this.callbackExecutor = Objects.requireNonNull(callbackExecutor, "callbackExecutor");
-        Objects.requireNonNull(starter, "starter").accept(() -> {});
-    }
-
-    private FutureResult(Executor callbackExecutor, boolean ignored) {
-        this.callbackExecutor = Objects.requireNonNull(callbackExecutor, "callbackExecutor");
-    }
-
     public static <T> FutureResult<T> completed(T value, Executor callbackExecutor) {
-        FutureResult<T> result = new FutureResult<>(callbackExecutor, true);
+        FutureResult<T> result = new FutureResult<>(callbackExecutor);
         result.complete(value);
         return result;
     }
 
     public static <T> FutureResult<T> failed(Throwable throwable, Executor callbackExecutor) {
-        FutureResult<T> result = new FutureResult<>(callbackExecutor, true);
+        FutureResult<T> result = new FutureResult<>(callbackExecutor);
         result.completeExceptionally(throwable);
         return result;
     }
 
     public static <T> FutureResult<T> supply(Executor executor, Executor callbackExecutor, Callable<T> callable) {
-        FutureResult<T> result = new FutureResult<>(callbackExecutor, true);
+        FutureResult<T> result = new FutureResult<>(callbackExecutor);
         executor.execute(() -> {
             if (result.isCancelled()) return;
             try {
@@ -67,7 +58,7 @@ public final class FutureResult<T> {
     }
 
     public <U> FutureResult<U> thenApply(Function<T, U> fn) {
-        FutureResult<U> next = new FutureResult<>(callbackExecutor, true);
+        FutureResult<U> next = new FutureResult<>(callbackExecutor);
         future.whenComplete((value, throwable) -> callbackExecutor.execute(() -> {
             if (throwable != null) {
                 next.completeExceptionally(unwrapCompletion(throwable));

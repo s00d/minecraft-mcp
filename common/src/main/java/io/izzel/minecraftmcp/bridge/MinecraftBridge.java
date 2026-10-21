@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.bridge;
 
+import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.concurrent.TickCounter;
 import io.izzel.minecraftmcp.condition.ConditionContext;
 import io.izzel.minecraftmcp.condition.ConditionEvaluator;
@@ -123,7 +124,7 @@ public interface MinecraftBridge {
                 "Condition '" + normalized + "' evaluated " + attempts + " times, never succeeded; last error: " + lastError, lastError);
         }
         if (lastError != null) {
-            System.err.println("[Minecraft MCP] wait_until last condition evaluation error for '" + normalized + "': " + lastError);
+            Log.LOG.warn("wait_until last condition evaluation error for '" + normalized + "': " + lastError);
         }
         return false;
     }

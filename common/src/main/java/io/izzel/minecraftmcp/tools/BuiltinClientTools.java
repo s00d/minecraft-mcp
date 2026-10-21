@@ -78,8 +78,10 @@ public final class BuiltinClientTools {
                 Map<String, Object> saved = bridge.takeScreenshot(screenshotName.get(args));
                 if (!inline.get(args)) return saved;
                 Map<String, Object> result = new LinkedHashMap<>(saved);
-                result.put("image", Map.of("mimeType", "image/png", "data",
-                    Images.pngBase64(java.nio.file.Path.of(String.valueOf(saved.get("absolutePath"))), maxWidth.get(args))));
+                Images.Png png = Images.png(java.nio.file.Path.of(String.valueOf(saved.get("absolutePath"))), maxWidth.get(args));
+                result.put("inlineWidth", png.width());
+                result.put("scaled", png.scaled());
+                result.put("image", Map.of("mimeType", "image/png", "data", png.base64()));
                 return result;
             })));
 
@@ -93,7 +95,12 @@ public final class BuiltinClientTools {
         registry.register(tool("mc.client.resources.reload", "Reload resource packs (textures, models, sounds, translations) like F3+T, "
             + "and return once it finished", List.of(TIMEOUT), args -> {
             long started = System.nanoTime();
+            long deadline = System.currentTimeMillis() + TIMEOUT.get(args);
             bridge.submit(bridge::reloadResources).get(10, TimeUnit.SECONDS).get(TIMEOUT.get(args), TimeUnit.MILLISECONDS);
+            // the loading overlay fades out after the reload itself finished; wait for it so a screenshot shows the game
+            while (bridge.submit(bridge::snapshot).get(10, TimeUnit.SECONDS).loading() && System.currentTimeMillis() < deadline) {
+                bridge.waitTicks(1);
+            }
             return Map.of("status", "reloaded", "elapsedMs", (System.nanoTime() - started) / 1_000_000);
         }));
 
@@ -246,7 +253,7 @@ public final class BuiltinClientTools {
             List.of(messageContains, TIMEOUT), args -> {
                 String needle = messageContains.get(args);
                 long deadline = System.currentTimeMillis() + Math.max(0, TIMEOUT.get(args));
-                Map<String, Object> state;
+                Map<String, Object> state = Map.of("disconnected", false);
                 do {
                     try {
                         state = bridge.submit(bridge::disconnectState).get(10, TimeUnit.SECONDS);
@@ -259,7 +266,6 @@ public final class BuiltinClientTools {
                         return state;
                     bridge.waitTicks(1);
                 } while (System.currentTimeMillis() < deadline);
-                state = bridge.submit(bridge::disconnectState).get(10, TimeUnit.SECONDS);
                 Map<String, Object> result = new LinkedHashMap<>(state);
                 result.put("matched", false);
                 result.put("messageContains", needle);
@@ -273,11 +279,9 @@ public final class BuiltinClientTools {
         Param<Integer> chatLimit = Param.integer("limit", "max messages, newest last").or(50);
         registry.register(read(tool("mc.client.chat.read", "Chat and system messages this client received (command feedback, server messages); pass the returned last as since next time",
             List.of(SINCE, CONTAINS, REGEX, chatLimit), args -> {
-                var log = bridge.chatLog();
-                long last = log.lastSequence();
-                List<Map<String, Object>> messages = log.read(SINCE.get(args), chatLimit.get(args), chatFilter(args)).stream()
-                    .map(ChatLog.Entry::toMap).toList();
-                return Map.of("messages", messages, "last", last);
+                ChatLog.Page page = bridge.chatLog().read(SINCE.get(args), chatLimit.get(args), chatFilter(args));
+                List<Map<String, Object>> messages = page.entries().stream().map(ChatLog.Entry::toMap).toList();
+                return Map.of("messages", messages, "last", page.last(), "more", page.more(), "missed", page.missed());
             })));
         registry.register(read(tool("mc.client.chat.wait", "Wait for a chat or system message matching contains/regex, received after since",
             List.of(SINCE, CONTAINS, REGEX, TIMEOUT), args -> {

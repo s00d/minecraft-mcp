@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp;
 
+import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.bridge.MinecraftBridge;
 import io.izzel.minecraftmcp.bridge.MinecraftClientBridge;
 import io.izzel.minecraftmcp.bridge.MinecraftServerBridge;
@@ -100,7 +101,7 @@ public final class MinecraftMcpBootstrap {
         McpConfig config = endpoint.config();
         if (config.scenarioDir().isBlank()) {
             if (config.batchExit()) {
-                System.err.println("[Minecraft MCP] scenario.batchExit is set but scenario.directory is blank; exiting 1");
+                Log.LOG.warn("scenario.batchExit is set but scenario.directory is blank; exiting 1");
                 System.exit(1);
             }
             return;
@@ -114,7 +115,7 @@ public final class MinecraftMcpBootstrap {
             try {
                 var report = endpoint.scenarios().runBatch(config.scenarioDir(), options);
                 exitCode = report.failed() > 0 ? 1 : 0;
-                System.out.println("[Minecraft MCP] scenario batch: " + Json.stringify(report.toMap()));
+                Log.LOG.info("scenario batch: " + Json.stringify(report.toMap()));
             } catch (Exception e) {
                 e.printStackTrace();
                 exitCode = 1;
@@ -123,7 +124,7 @@ public final class MinecraftMcpBootstrap {
                     if (exitCode == 0) {
                         onBatchExit.run();
                     } else {
-                        System.err.println("[Minecraft MCP] scenario batch reported failures; exiting " + exitCode);
+                        Log.LOG.warn("scenario batch reported failures; exiting " + exitCode);
                         System.exit(exitCode);
                     }
                 }

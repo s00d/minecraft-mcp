@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.config;
 
+import io.izzel.minecraftmcp.util.Log;
 import java.util.List;
 import java.util.Objects;
 
@@ -24,7 +25,7 @@ public final class McpConfigs {
     public static void report() {
         McpConfig config = current();
         for (String line : config.report()) {
-            System.out.println("[Minecraft MCP] " + line);
+            Log.LOG.info(line);
         }
         List<String> problems = config.problems();
         if (!problems.isEmpty()) {

@@ -4,7 +4,6 @@ import io.izzel.minecraftmcp.concurrent.McpWorkers;
 import io.izzel.minecraftmcp.config.McpConfig;
 import io.izzel.minecraftmcp.config.TestConfigs;
 import io.izzel.minecraftmcp.config.ChannelCaller;
-import io.izzel.minecraftmcp.json.Json;
 import io.izzel.minecraftmcp.mcp.McpTools;
 import io.izzel.minecraftmcp.mcp.ToolRegistry;
 import org.junit.jupiter.api.Test;
@@ -121,25 +120,6 @@ class McpPluginMessageHandlerTrustTest {
         assertEquals("", out.toString());
     }
 
-    private static long pendingCall(RemoteMcpProxy proxy, AtomicReference<Exception> failure,
-                                    AtomicReference<Object> result, long timeoutMs) throws Exception {
-        AtomicReference<String> sent = new AtomicReference<>();
-        Thread caller = new Thread(() -> {
-            try {
-                result.set(proxy.call("mc.server.state", Map.of(), sent::set, timeoutMs));
-            } catch (Exception e) {
-                failure.set(e);
-            }
-        }, "pending-call");
-        caller.setDaemon(true);
-        caller.start();
-        for (int i = 0; i < 500 && sent.get() == null; i++) {
-            Thread.sleep(10);
-        }
-        assertNotNull(sent.get(), "the call never went out");
-        return ((Number) ((Map<?, ?>) Json.parse(sent.get())).get("id")).longValue();
-    }
-
     private static String reply(long id) {
         return "{\"type\":\"response\",\"id\":" + id + ",\"ok\":true,\"result\":{\"running\":true}}";
     }
@@ -148,17 +128,14 @@ class McpPluginMessageHandlerTrustTest {
     void anUntrustedServersReplyIsIgnoredEvenWhenTheIdMatches() throws Exception {
         McpConfig config = TestConfigs.access(List.of(), List.of("good.example.com"));
         RemoteMcpProxy proxy = RemoteMcpProxies.toServer();
-        AtomicReference<Exception> failure = new AtomicReference<>();
-        AtomicReference<Object> result = new AtomicReference<>();
         try {
-            long id = pendingCall(proxy, failure, result, 500);
+            PendingCall call = new PendingCall(proxy, "mc.server.state", 500);
 
             new McpPluginMessageHandler(registry(config), () -> config, McpWorkers.direct())
-                .receiveResponse(reply(id), new ChannelCaller.Server("evil.example.com:25565"));
+                .receiveResponse(reply(call.id()), new ChannelCaller.Server("evil.example.com:25565"));
 
-            Thread.sleep(700);
-            assertNull(result.get(), "an untrusted reply must not complete the call");
-            assertNotNull(failure.get(), "the call should have timed out instead");
+            assertInstanceOf(java.util.concurrent.TimeoutException.class, call.failure(),
+                "an untrusted reply must not complete the call; it should time out instead");
         } finally {
             proxy.failPending();
         }
@@ -168,19 +145,14 @@ class McpPluginMessageHandlerTrustTest {
     void aTrustedServersReplyCompletesTheCall() throws Exception {
         McpConfig config = TestConfigs.access(List.of(), List.of("good.example.com"));
         RemoteMcpProxy proxy = RemoteMcpProxies.toServer();
-        AtomicReference<Exception> failure = new AtomicReference<>();
-        AtomicReference<Object> result = new AtomicReference<>();
         try {
-            long id = pendingCall(proxy, failure, result, 5_000);
+            PendingCall call = new PendingCall(proxy, "mc.server.state", 5_000);
 
             new McpPluginMessageHandler(registry(config), () -> config, McpWorkers.direct())
-                .receiveResponse(reply(id), new ChannelCaller.Server("good.example.com"));
+                .receiveResponse(reply(call.id()), new ChannelCaller.Server("good.example.com"));
 
-            for (int i = 0; i < 200 && result.get() == null; i++) {
-                Thread.sleep(10);
-            }
-            assertNull(failure.get(), () -> "the call failed: " + failure.get());
-            assertEquals(Map.of("running", true), result.get());
+            assertNull(call.failure());
+            assertEquals(Map.of("running", true), call.result.get());
         } finally {
             proxy.failPending();
         }

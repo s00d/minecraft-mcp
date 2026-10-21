@@ -191,12 +191,13 @@ public final class JsonRpcHandler {
             Object result = registry.call(name, args);
             // A result with an "image" entry ({mimeType, data: base64}) carries it as MCP image content,
             // so a vision-capable client sees the picture; the rest stays the usual JSON text.
-            if (result instanceof Map<?, ?> map && map.get("image") instanceof Map<?, ?> image) {
+            if (result instanceof Map<?, ?> map && map.get("image") instanceof Map<?, ?> image
+                    && image.get("data") instanceof String data && image.get("mimeType") instanceof String mimeType) {
                 Map<Object, Object> rest = new LinkedHashMap<>(map);
                 rest.remove("image");
                 Map<String, Object> withImage = new LinkedHashMap<>();
                 withImage.put("content", List.of(
-                        Map.of("type", "image", "mimeType", String.valueOf(image.get("mimeType")), "data", String.valueOf(image.get("data"))),
+                        Map.of("type", "image", "mimeType", mimeType, "data", data),
                         Map.of("type", "text", "text", Json.stringify(rest))));
                 withImage.put("isError", false);
                 return withImage;

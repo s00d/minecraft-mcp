@@ -20,6 +20,8 @@ public final class McpPluginMessageHandler {
     private final ToolRegistry tools;
     private final Supplier<McpConfig> policy;
     private final Executor workers;
+    private final PayloadChunks.Reassembler requests = new PayloadChunks.Reassembler();
+    private final PayloadChunks.Reassembler responses = new PayloadChunks.Reassembler();
 
     public McpPluginMessageHandler(ToolRegistry tools, Supplier<McpConfig> policy, Executor workers) {
         this.tools = Objects.requireNonNull(tools, "tools");
@@ -27,10 +29,16 @@ public final class McpPluginMessageHandler {
         this.workers = Objects.requireNonNull(workers, "workers");
     }
 
-    public void receiveRequest(String payload, ChannelCaller caller, Sender sender) {
+    public void receiveRequest(String packet, ChannelCaller caller, Sender packetSender) {
         McpConfig config = policy.get();
         boolean trusted = config.trusts(caller);
         String denial = trusted ? null : config.refusal(caller);
+        // only trusted peers may make this side hold parts of a big request in memory
+        String payload = trusted ? requests.accept(packet) : PayloadChunks.isPart(packet) ? null : packet;
+        if (payload == null) {
+            return;
+        }
+        Sender sender = text -> PayloadChunks.send(text, packetSender::send);
 
         try {
             workers.execute(() -> answer(payload, trusted, denial, sender));
@@ -43,8 +51,12 @@ public final class McpPluginMessageHandler {
         }
     }
 
-    public void receiveResponse(String payload, ChannelCaller caller) {
+    public void receiveResponse(String packet, ChannelCaller caller) {
         if (!policy.get().trusts(caller)) {
+            return;
+        }
+        String payload = responses.accept(packet);
+        if (payload == null) {
             return;
         }
         RemoteMcpProxy proxy = proxyFor(caller);

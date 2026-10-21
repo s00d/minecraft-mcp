@@ -30,7 +30,7 @@ class FutureResultTest {
 
     @Test
     void awaitUsesUnifiedTimeout() {
-        FutureResult<String> result = new FutureResult<>(mainThread -> {}, Runnable::run);
+        FutureResult<String> result = new FutureResult<>(Runnable::run);
         assertThrows(TimeoutException.class, () -> result.await(1));
     }
 

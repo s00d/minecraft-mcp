@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.fabric;
 
+import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.compat.MinecraftCompat;
 import io.izzel.minecraftmcp.config.McpConfig;
 import io.izzel.minecraftmcp.config.McpConfigDocument;
@@ -57,13 +58,13 @@ final class FabricMcpConfig {
         try {
             text = Files.readString(file, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            System.err.println("[Minecraft MCP] cannot read " + file + "; falling back to defaults: " + e);
+            Log.LOG.warn("cannot read " + file + "; falling back to defaults: " + e);
             return McpConfigDocument.empty();
         }
         try {
             return McpConfigDocument.read(text);
         } catch (RuntimeException e) {
-            System.err.println("[Minecraft MCP] " + file + " is not valid JSON (" + e.getMessage()
+            Log.LOG.warn(file + " is not valid JSON (" + e.getMessage()
                 + "); falling back to defaults, so no caller will be trusted");
             return McpConfigDocument.empty();
         }
@@ -77,7 +78,7 @@ final class FabricMcpConfig {
             Files.createDirectories(file.getParent());
             Files.writeString(file, McpConfigDocument.defaultDocument(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            System.err.println("[Minecraft MCP] could not write the default config to " + file + ": " + e);
+            Log.LOG.warn("could not write the default config to " + file + ": " + e);
         }
     }
 
@@ -85,7 +86,7 @@ final class FabricMcpConfig {
         try {
             return MAY_REMOTE_CALL.test(player);
         } catch (RuntimeException e) {
-            System.err.println("[Minecraft MCP] could not resolve " + McpPermissions.REMOTE_CALL_FABRIC
+            Log.LOG.warn("could not resolve " + McpPermissions.REMOTE_CALL_FABRIC
                 + " for " + MinecraftCompat.profileName(player) + ", refusing: " + e);
             return false;
         }

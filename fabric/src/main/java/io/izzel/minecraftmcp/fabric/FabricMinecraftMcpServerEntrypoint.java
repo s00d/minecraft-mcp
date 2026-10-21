@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.fabric;
 
+import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.compat.MinecraftCompat;
 import io.izzel.minecraftmcp.MinecraftMcpBootstrap;
 import io.izzel.minecraftmcp.config.McpConfigs;
@@ -66,7 +67,7 @@ public final class FabricMinecraftMcpServerEntrypoint implements DedicatedServer
                         });
                 server.getPlayerList().getPlayers().forEach(player ->
                         RemoteMcpProxies.rememberClientName(player.getUUID(), MinecraftCompat.profileName(player)));
-                System.out.println("[Minecraft MCP] Fabric dedicated MCP server started on port " + endpoint.port());
+                Log.LOG.info("Fabric dedicated MCP server started on port " + endpoint.port());
             } catch (Exception e) {
                 throw new RuntimeException("Failed to start Minecraft MCP dedicated server", e);
             }

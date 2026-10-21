@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.neoforge;
 
+import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.compat.MinecraftCompat;
 import io.izzel.minecraftmcp.config.DefaultOptions;
 import io.izzel.minecraftmcp.config.McpConfig;
@@ -144,7 +145,7 @@ final class NeoForgeMcpConfig {
             }
         }
         if (!missing.isEmpty()) {
-            System.err.println("[Minecraft MCP] " + FILE_NAME + " does not define " + missing
+            Log.LOG.warn(FILE_NAME + " does not define " + missing
                 + "; those can only be set from a system property or the environment");
         }
     }
@@ -173,7 +174,7 @@ final class NeoForgeMcpConfig {
         try {
             return PermissionAPI.getPermission(player, REMOTE_CALL);
         } catch (RuntimeException e) {
-            System.err.println("[Minecraft MCP] could not resolve " + McpPermissions.REMOTE_CALL_NEOFORGE
+            Log.LOG.warn("could not resolve " + McpPermissions.REMOTE_CALL_NEOFORGE
                 + " for " + MinecraftCompat.profileName(player) + ", refusing: " + e);
             return false;
         }
@@ -208,7 +209,7 @@ final class NeoForgeMcpConfig {
             try {
                 return value.get();
             } catch (IllegalStateException e) {
-                System.err.println("[Minecraft MCP] " + String.join(".", path)
+                Log.LOG.warn(String.join(".", path)
                     + " was read before " + FILE_NAME + " loaded; using the built-in default");
                 return null;
             }
