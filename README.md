@@ -17,6 +17,39 @@ run commands, control time, record packets, copy builds as schematics and run sc
 - **Every recent version, both loaders.** One source tree builds NeoForge and Fabric jars for
   Minecraft 1.21.1 through 26.3.
 
+## Quick start
+
+**1. Download.** Open the [latest release](../../releases/latest) and download the jar that matches your
+loader and Minecraft version: `minecraft_mcp-<loader>-0.2.0+<minecraft>.jar`, for example
+`minecraft_mcp-fabric-0.2.0+1.21.11.jar` or `minecraft_mcp-neoforge-0.2.0+26.3.jar`. Versions are listed
+[below](#supported-versions).
+
+**2. Put it in `mods/`** of the game (or server) directory:
+
+| Launcher | `mods/` folder |
+|---|---|
+| Vanilla launcher, Windows | `%APPDATA%\.minecraft\mods` |
+| Vanilla launcher, macOS | `~/Library/Application Support/minecraft/mods` |
+| Vanilla launcher, Linux | `~/.minecraft/mods` |
+| Prism, MultiMC, CurseForge, Modrinth App | the instance's folder → `mods` (the launcher has an "Open folder" button) |
+| Dedicated server | `mods/` next to the server jar |
+
+Fabric also needs [Fabric API](https://modrinth.com/mod/fabric-api) for the same Minecraft version in
+`mods/`. NeoForge needs nothing else.
+
+**3. Start Minecraft** with that loader's profile. The log shows
+`[Minecraft MCP] ... MCP server started on port 25580`.
+
+**4. Connect your agent** (the game must be running):
+
+```bash
+claude mcp add --transport http minecraft http://127.0.0.1:25580/mcp
+```
+
+Then ask it, for example, "create a flat test world and take a screenshot". For a dedicated server use
+port `25581` (`claude mcp add --transport http minecraft-server http://127.0.0.1:25581/mcp`). Other
+clients are under [Connect an agent](#connect-an-agent).
+
 ## Supported versions
 
 | Minecraft | NeoForge | Fabric Loader / Fabric API | Java |
@@ -31,15 +64,6 @@ run commands, control time, record packets, copy builds as schematics and run sc
 
 Each jar targets exactly one Minecraft version; the NeoForge and Fabric versions listed are the
 minimums it is built against.
-
-## Install
-
-1. Download the jar for your loader and Minecraft version from the
-   [releases](../../releases): `minecraft_mcp-<loader>-<mod version>+<minecraft>.jar`.
-2. Put it in `mods/`. Fabric also needs [Fabric API](https://modrinth.com/mod/fabric-api) there.
-3. Start the game (or the server). The same jar works on both sides.
-
-The endpoint is `http://127.0.0.1:25580/mcp` in a client and `http://127.0.0.1:25581/mcp` in a server.
 
 ## Connect an agent
 
