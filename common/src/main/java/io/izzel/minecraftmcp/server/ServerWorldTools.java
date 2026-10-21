@@ -22,13 +22,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.entity.EntityTypeTest;
 import net.minecraft.world.phys.AABB;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -266,27 +260,6 @@ public final class ServerWorldTools {
         return result;
     }
 
-    public static Map<String, Object> tailLog(Path gameDirectory, int lines) {
-        Path log = gameDirectory.resolve("logs/latest.log");
-        if (!Files.isRegularFile(log)) {
-            return Map.of("status", "missing", "path", log.toString(), "lines", List.of());
-        }
-        Deque<String> tail = new ArrayDeque<>();
-        try (var reader = Files.newBufferedReader(log, StandardCharsets.UTF_8)) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                tail.addLast(line);
-                if (tail.size() > lines) {
-                    tail.removeFirst();
-                }
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("could not read " + log + ": " + e.getMessage(), e);
-        }
-        return Map.of("status", "ok", "path", log.toString(), "requested", lines,
-            "returned", tail.size(), "lines", List.copyOf(tail));
-    }
-
     private static Map<String, Object> playerSummary(ServerPlayer player) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("name", MinecraftCompat.profileName(player));
@@ -310,7 +283,7 @@ public final class ServerWorldTools {
         return map;
     }
 
-    private static ServerLevel level(MinecraftServer server, String dimension) {
+    static ServerLevel level(MinecraftServer server, String dimension) {
         String id = dimension.contains(":") ? dimension : "minecraft:" + dimension;
         List<String> known = new ArrayList<>();
         for (ServerLevel candidate : server.getAllLevels()) {

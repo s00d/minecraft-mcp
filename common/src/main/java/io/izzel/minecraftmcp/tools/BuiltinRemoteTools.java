@@ -16,6 +16,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static io.izzel.minecraftmcp.mcp.McpTools.destructive;
+import static io.izzel.minecraftmcp.mcp.McpTools.read;
 import static io.izzel.minecraftmcp.mcp.McpTools.tool;
 
 public final class BuiltinRemoteTools {
@@ -39,10 +41,10 @@ public final class BuiltinRemoteTools {
     }
 
     public static void registerClient(ToolRegistry registry, MinecraftClientBridge bridge) {
-        registry.register(tool("mc.remote.call", "Call a tool on the connected server over the plugin channel", List.of(TOOL, ARGUMENTS, TIMEOUT), args -> {
+        registry.register(destructive(tool("mc.remote.call", "Call a tool on the connected server over the plugin channel", List.of(TOOL, ARGUMENTS, TIMEOUT), args -> {
             return bridge.serverMcpCall(TOOL.get(args), ARGUMENTS.get(args), TIMEOUT.get(args));
-        }));
-        registry.register(tool("mc.remote.state", "Report whether the server is reachable over the plugin channel",
+        })));
+        registry.register(read(tool("mc.remote.state", "Report whether the server is reachable over the plugin channel",
             args -> bridge.submit(() -> {
                 boolean remote = bridge.remoteMcpAvailable();
                 boolean integrated = bridge.integratedServerAvailable();
@@ -52,12 +54,12 @@ public final class BuiltinRemoteTools {
                 result.put("integratedServer", integrated);
                 result.put("kind", remote ? "plugin-channel" : integrated ? "integrated" : "none");
                 return result;
-            }).get(10, TimeUnit.SECONDS)));
+            }).get(10, TimeUnit.SECONDS))));
     }
 
     public static void registerServer(ToolRegistry registry, MinecraftServerBridge bridge,
                                       ClientSender sender, ClientPeers peers) {
-        registry.register(tool("mc.remote.call", "Call a tool on one connected player's client over the plugin channel",
+        registry.register(destructive(tool("mc.remote.call", "Call a tool on one connected player's client over the plugin channel",
                 List.of(TOOL, ARGUMENTS, TIMEOUT, PLAYER), args -> {
             String tool = TOOL.get(args);
             long timeoutMs = TIMEOUT.get(args);
@@ -80,8 +82,8 @@ public final class BuiltinRemoteTools {
                 throw new IllegalStateException("player " + peer.caller().name() + " is not known to this server");
             }
             return proxy.call(tool, ARGUMENTS.get(args), payload -> sender.send(target, payload), timeoutMs);
-        }));
-        registry.register(tool("mc.remote.state", "List clients reachable over the plugin channel", args -> {
+        })));
+        registry.register(read(tool("mc.remote.state", "List clients reachable over the plugin channel", args -> {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("side", "server");
             result.put("clients", bridge.submit(() -> RemoteMcpProxies.clientSummaries(uuid -> {
@@ -89,7 +91,7 @@ public final class BuiltinRemoteTools {
                 return peer != null && peer.reachable();
             })).get(10, TimeUnit.SECONDS));
             return result;
-        }));
+        })));
     }
 
     private static UUID resolvePlayer(String player) {

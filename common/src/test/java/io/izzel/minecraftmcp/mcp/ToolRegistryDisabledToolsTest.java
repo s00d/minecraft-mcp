@@ -15,10 +15,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class ToolRegistryDisabledToolsTest {
     private static ToolRegistry populated(Supplier<McpConfig> policy) {
         ToolRegistry registry = new ToolRegistry(policy);
-        registry.register(McpTools.simple("mc.server.state", "state", args -> Map.of("running", true)));
-        registry.register(McpTools.simple("mc.server.log.tail", "log", args -> Map.of("lines", List.of())));
-        registry.register(McpTools.simple("mc.remote.call", "remote", args -> Map.of("ok", true)));
-        registry.register(McpTools.simple("mc.remote.state", "remote state", args -> Map.of("ok", true)));
+        registry.register(McpTools.read(McpTools.tool("mc.server.state", "state", args -> Map.of("running", true))));
+        registry.register(McpTools.read(McpTools.tool("mc.server.log.tail", "log", args -> Map.of("lines", List.of()))));
+        registry.register(McpTools.destructive(McpTools.tool("mc.remote.call", "remote", args -> Map.of("ok", true))));
+        registry.register(McpTools.tool("mc.remote.state", "remote state", args -> Map.of("ok", true)));
         return registry;
     }
 
@@ -26,7 +26,7 @@ class ToolRegistryDisabledToolsTest {
     void noArgConstructorDisablesNothing() {
         ToolRegistry registry = populated(() -> TestConfigs.empty());
         ToolRegistry bare = new ToolRegistry();
-        bare.register(McpTools.simple("mc.server.state", "state", args -> Map.of()));
+        bare.register(McpTools.tool("mc.server.state", "state", args -> Map.of()));
 
         assertEquals(4, registry.listTools().size());
         assertEquals(1, bare.listTools().size());
@@ -92,5 +92,26 @@ class ToolRegistryDisabledToolsTest {
         assertEquals(4, registry.listTools().size());
         file.put(List.of("mc.remote.*"), "access", "disabledTools");
         assertEquals(2, registry.listTools().size());
+    }
+
+    @Test
+    void readOnlyServesOnlyReadingTools() throws Exception {
+        MapOptions file = MapOptions.of();
+        ToolRegistry registry = populated(() -> new McpConfig(file, "config/test.json"));
+        file.put("true", "access", "readOnly");
+
+        List<String> names = registry.listTools().stream().map(t -> String.valueOf(t.get("name"))).toList();
+        assertEquals(List.of("mc.server.log.tail", "mc.server.state"), names);
+        assertThrows(ToolRegistry.UnknownToolException.class, () -> registry.call("mc.remote.call", Map.of()));
+        assertEquals(Map.of("running", true), registry.call("mc.server.state", Map.of()));
+    }
+
+    @Test
+    void theKindBecomesMcpAnnotations() {
+        Map<String, Map<?, ?>> annotations = new java.util.HashMap<>();
+        populated(TestConfigs::empty).listTools().forEach(t -> annotations.put((String) t.get("name"), (Map<?, ?>) t.get("annotations")));
+        assertEquals(Map.of("readOnlyHint", true, "destructiveHint", false, "openWorldHint", false), annotations.get("mc.server.state"));
+        assertEquals(Map.of("readOnlyHint", false, "destructiveHint", true, "openWorldHint", false), annotations.get("mc.remote.call"));
+        assertEquals(Map.of("readOnlyHint", false, "destructiveHint", false, "openWorldHint", false), annotations.get("mc.remote.state"));
     }
 }

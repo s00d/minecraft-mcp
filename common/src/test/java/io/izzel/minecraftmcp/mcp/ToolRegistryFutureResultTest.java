@@ -2,6 +2,7 @@ package io.izzel.minecraftmcp.mcp;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,6 +52,6 @@ class ToolRegistryFutureResultTest {
     }
 
     private static McpTool simple(String name, McpTools.ToolBody body) {
-        return McpTools.simple(name, name, body);
+        return McpTools.tool(name, name, List.of(Param.longInt("timeoutMs", "give up after this many milliseconds")), body);
     }
 }

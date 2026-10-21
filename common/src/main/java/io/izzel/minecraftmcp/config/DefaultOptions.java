@@ -15,6 +15,7 @@ public final class DefaultOptions implements McpOptions {
         DEFAULTS.put(List.of("endpoint", "headless"), "false");
         DEFAULTS.put(List.of("scenario", "directory"), "");
         DEFAULTS.put(List.of("scenario", "batchExit"), "false");
+        DEFAULTS.put(List.of("access", "readOnly"), "false");
         DEFAULTS.put(List.of("access", "disabledTools"), List.of());
         DEFAULTS.put(List.of("access", "trustedServers"), List.of());
     }

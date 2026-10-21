@@ -64,14 +64,15 @@ final class NeoForgeMcpConfig {
             .gameRestart()
             .defineInRange("port", 0, 0, 65535));
         define(BUILDER.comment("Bearer token for the local HTTP endpoint.",
-                "Blank mints a random token once and keeps it in mcp/token.",
+                "Blank on a loopback bind means no token: any local program may connect, browsers",
+                "are refused by the Origin check. Blank on any other bind mints one into mcp/token.",
                 "Requires a game restart: the token is already published in mcp/server.json.")
             .translation("minecraft_mcp.configuration.endpoint.authToken")
             .gameRestart()
             .define("authToken", ""));
-        define(BUILDER.comment("Advertised in mc.debug.capabilities so an agent knows this is a virtual",
-                "display rather than a real one. Informational only.",
-                "Requires a game restart: it describes how this process was launched.")
+        define(BUILDER.comment("Hide the game window once the game started: it keeps rendering, so screenshots",
+                "work, and mc.client.window shows it again. For automated runs: no stray clicks.",
+                "Requires a game restart: it is applied at startup.")
             .translation("minecraft_mcp.configuration.endpoint.headless")
             .gameRestart()
             .define("headless", false));
@@ -90,8 +91,12 @@ final class NeoForgeMcpConfig {
             .define("batchExit", false));
         BUILDER.pop();
 
-        BUILDER.comment("Access policy. These two take effect as soon as the file is saved.")
+        BUILDER.comment("Access policy. These take effect as soon as the file is saved.")
             .push("access");
+        define(BUILDER.comment("Serve only tools that read the game (state, screens, chat, inventory,",
+                "screenshots, waits); everything that acts on it is absent, as if disabled.")
+            .translation("minecraft_mcp.configuration.access.readOnly")
+            .define("readOnly", false));
         define(BUILDER.comment("Tools this process refuses to serve, by exact name or a trailing-* prefix.",
                 "Applies everywhere, including the local HTTP endpoint: a disabled tool is absent",
                 "from tools/list and tools/call answers -32602.",

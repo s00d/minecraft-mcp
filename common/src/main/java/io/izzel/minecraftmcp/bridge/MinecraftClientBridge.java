@@ -1,6 +1,7 @@
 package io.izzel.minecraftmcp.bridge;
 
 import io.izzel.minecraftmcp.chat.ChatLog;
+import io.izzel.minecraftmcp.concurrent.TickCounter;
 import io.izzel.minecraftmcp.config.McpConfigs;
 import io.izzel.minecraftmcp.packet.PacketFilter;
 import io.izzel.minecraftmcp.packet.PacketRecorder;
@@ -23,6 +24,11 @@ public interface MinecraftClientBridge extends MinecraftBridge {
     }
 
     boolean isOnClientThread();
+
+    @Override
+    default TickCounter ticks() {
+        return TickCounter.CLIENT;
+    }
 
     @Override
     default boolean isOnGameThread() {
@@ -77,6 +83,15 @@ public interface MinecraftClientBridge extends MinecraftBridge {
 
     default FutureResult<Map<String, Object>> jump() {
         throw new UnsupportedOperationException("Jump is not implemented by " + loader());
+    }
+
+    default Map<String, Object> window(Boolean visible) {
+        throw new UnsupportedOperationException("Window control is not implemented by " + loader());
+    }
+
+    /** Reloads resource packs (textures, models, sounds, lang) like F3+T; completes when done. */
+    default java.util.concurrent.CompletableFuture<?> reloadResources() {
+        throw new UnsupportedOperationException("Resource reload is not implemented by " + loader());
     }
 
     default Map<String, Object> vehicleState() {

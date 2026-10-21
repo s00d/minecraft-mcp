@@ -45,6 +45,7 @@ public final class MinecraftMcpBootstrap {
         BuiltinRemoteTools.registerClient(registry, bridge);
         registerIntegratedServerTools(registry, bridge);
         McpEndpoint endpoint = startEndpoint(config, registry, scenarios, bridge);
+        if (config.headless()) bridge.execute(() -> bridge.window(false));
         runScenarioBatch(endpoint, bridge, () -> bridge.execute(bridge::shutdownClient));
         return endpoint;
     }
@@ -67,13 +68,10 @@ public final class MinecraftMcpBootstrap {
             if (!tool.name().startsWith("mc.server.")) {
                 continue;
             }
-            registry.register(McpTools.simple(tool.name(), tool.description(), tool.inputSchema(), args -> {
+            registry.register(McpTools.withBody(tool, args -> {
                 if (!integrated.present()) {
-                    return Map.of(
-                        "error", "no_local_server",
-                        "side", "client",
-                        "hint", "this process has no MinecraftServer; open a singleplayer world, "
-                            + "or use mc.remote.call to reach the one you are connected to");
+                    throw new IllegalStateException("no_local_server: this client has no MinecraftServer; open a singleplayer "
+                        + "world, or use mc.remote.call to reach the server you are connected to");
                 }
                 return tool.call(args);
             }));

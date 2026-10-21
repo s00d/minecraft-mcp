@@ -70,6 +70,7 @@ class McpOptionsAdapterTest {
             List.of("endpoint", "headless"),
             List.of("scenario", "directory"),
             List.of("scenario", "batchExit"),
+            List.of("access", "readOnly"),
             List.of("access", "disabledTools"),
             List.of("access", "trustedServers")), DefaultOptions.paths());
     }

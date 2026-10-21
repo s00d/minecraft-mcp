@@ -116,13 +116,23 @@ public final class IntegratedServerBridge implements MinecraftServerBridge {
     }
 
     @Override
-    public Map<String, Object> tickStats() {
-        return require().tickStats();
+    public Map<String, Object> time(String dimension, Long set, Long add) {
+        return require().time(dimension, set, add);
     }
 
     @Override
-    public Map<String, Object> tailLog(int lines) {
-        return require().tailLog(lines);
+    public Map<String, Object> tickRate(Float rate, Boolean frozen, Integer step, Integer sprint) {
+        return require().tickRate(rate, frozen, step, sprint);
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<Map<String, Object>> reload() {
+        return require().reload();
+    }
+
+    @Override
+    public Map<String, Object> tickStats() {
+        return require().tickStats();
     }
 
     @Override

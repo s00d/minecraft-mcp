@@ -4,6 +4,11 @@ import java.nio.file.Path;
 import java.util.Map;
 
 public class FakeServerBridge implements MinecraftServerBridge {
+    @Override
+    public io.izzel.minecraftmcp.concurrent.TickCounter ticks() {
+        return FakeTicks.RUNNING;
+    }
+
     protected final FakeGameThread gameThread = new FakeGameThread();
 
     public void onGameThread(Runnable task) {

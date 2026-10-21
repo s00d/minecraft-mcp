@@ -19,9 +19,15 @@ public final class Param<T> {
     private final T fallback;
     private final List<String> aliases;
     private final Function<Object, T> parser;
+    private final List<String> choices;
 
     private Param(String name, String type, String description, boolean required, T fallback, List<String> aliases,
                   Function<Object, T> parser) {
+        this(name, type, description, required, fallback, aliases, parser, List.of());
+    }
+
+    private Param(String name, String type, String description, boolean required, T fallback, List<String> aliases,
+                  Function<Object, T> parser, List<String> choices) {
         this.name = name;
         this.type = type;
         this.description = description;
@@ -29,10 +35,21 @@ public final class Param<T> {
         this.fallback = fallback;
         this.aliases = aliases;
         this.parser = parser;
+        this.choices = choices;
     }
 
     public static Param<String> string(String name, String description) {
         return new Param<>(name, "string", description, false, null, List.of(), String::valueOf);
+    }
+
+    /** A string that must be one of {@code values} (matched ignoring case, returned as listed); the schema's enum. */
+    public static Param<String> oneOf(String name, String description, String... values) {
+        List<String> choices = List.of(values);
+        return new Param<>(name, "string", description, false, null, List.of(), value -> {
+            String text = String.valueOf(value).trim();
+            for (String choice : choices) if (choice.equalsIgnoreCase(text)) return choice;
+            throw new IllegalArgumentException(name + " must be one of " + choices + ", got '" + value + "'");
+        }, choices);
     }
 
     public static Param<Integer> integer(String name, String description) {
@@ -82,17 +99,17 @@ public final class Param<T> {
     }
 
     public Param<T> required() {
-        return new Param<>(name, type, description, true, null, aliases, parser);
+        return new Param<>(name, type, description, true, null, aliases, parser, choices);
     }
 
     /** The value used when the argument is absent; shown as the schema default. */
     public Param<T> or(T fallback) {
-        return new Param<>(name, type, description, false, fallback, aliases, parser);
+        return new Param<>(name, type, description, false, fallback, aliases, parser, choices);
     }
 
     /** Older or shorter names this argument is also accepted under. */
     public Param<T> alias(String... names) {
-        return new Param<>(name, type, description, required, fallback, List.of(names), parser);
+        return new Param<>(name, type, description, required, fallback, List.of(names), parser, choices);
     }
 
     public String name() {
@@ -118,6 +135,7 @@ public final class Param<T> {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", type);
         if (description != null && !description.isBlank()) schema.put("description", description);
+        if (!choices.isEmpty()) schema.put("enum", choices);
         if (fallback != null) schema.put("default", fallback);
         return schema;
     }

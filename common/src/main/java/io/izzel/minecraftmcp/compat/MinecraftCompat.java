@@ -113,6 +113,26 @@ public final class MinecraftCompat {
         //?}
     }
 
+    /** The day time /time reports: the dimension's default clock from 26.1, the level's day time before. */
+    public static long dayTime(ServerLevel level) {
+        //? if >=26.1 {
+        /*return level.getDefaultClockTime();
+        *///?} else {
+        return level.getDayTime();
+        //?}
+    }
+
+    /** Sets the day time the way /time set does: the default clock from 26.1 (server-wide), every level before. */
+    public static void setDayTime(ServerLevel level, long time) {
+        //? if >=26.1 {
+        /*var clock = level.dimensionTypeRegistration().value().defaultClock()
+            .orElseThrow(() -> new IllegalArgumentException(id(level.dimension()) + " has no clock"));
+        level.clockManager().setTotalTicks(clock, time);
+        *///?} else {
+        for (ServerLevel each : level.getServer().getAllLevels()) each.setDayTime(time);
+        //?}
+    }
+
     public static Registry<Biome> biomes(ServerLevel level) {
         //? if >=1.21.2 {
         return level.registryAccess().lookupOrThrow(Registries.BIOME);

@@ -11,8 +11,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class JsonRpcHandlerDisabledToolsTest {
     private static JsonRpcHandler handler(String... disabled) {
         ToolRegistry registry = new ToolRegistry(() -> TestConfigs.access(List.of(disabled), List.of()));
-        registry.register(McpTools.simple("mc.server.state", "state", args -> Map.of("running", true)));
-        registry.register(McpTools.simple("mc.server.log.tail", "log", args -> Map.of("lines", List.of())));
+        registry.register(McpTools.tool("mc.server.state", "state", args -> Map.of("running", true)));
+        registry.register(McpTools.tool("mc.server.log.tail", "log", args -> Map.of("lines", List.of())));
         return new JsonRpcHandler(registry);
     }
 

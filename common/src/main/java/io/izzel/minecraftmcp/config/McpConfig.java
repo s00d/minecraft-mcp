@@ -65,6 +65,10 @@ public final class McpConfig {
         return resolve(Boolean.class, "scenario", "batchExit");
     }
 
+    public boolean readOnly() {
+        return resolve(Boolean.class, "access", "readOnly");
+    }
+
     @SuppressWarnings("unchecked")
     public Set<String> disabledTools() {
         Set<String> cleaned = new LinkedHashSet<>();
@@ -177,7 +181,7 @@ public final class McpConfig {
         List<String> problems = new ArrayList<>();
         for (Runnable option : List.<Runnable>of(
             this::bindHost, this::port, this::authToken, this::headless,
-            this::scenarioDir, this::batchExit, this::disabledTools, this::trustedServers)) {
+            this::scenarioDir, this::batchExit, this::readOnly, this::disabledTools, this::trustedServers)) {
             try {
                 option.run();
             } catch (IllegalArgumentException e) {

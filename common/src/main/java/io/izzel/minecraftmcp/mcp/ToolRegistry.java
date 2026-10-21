@@ -33,20 +33,21 @@ public final class ToolRegistry {
     }
 
     public Optional<McpTool> find(String name) {
-        if (disabled(name)) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(tools.get(name));
+        return Optional.ofNullable(tools.get(name)).filter(tool -> !hidden(tool));
     }
 
     public List<Map<String, Object>> listTools() {
         return tools.values().stream()
-            .filter(tool -> !disabled(tool.name()))
+            .filter(tool -> !hidden(tool))
             .sorted(Comparator.comparing(McpTool::name)).map(t -> {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("name", t.name());
                 m.put("description", t.description());
                 m.put("inputSchema", t.inputSchema());
+                m.put("annotations", Map.of(
+                    "readOnlyHint", t.kind() == McpTool.Kind.READ,
+                    "destructiveHint", t.kind() == McpTool.Kind.DESTRUCTIVE,
+                    "openWorldHint", false));
                 return m;
             }).toList();
     }
@@ -67,9 +68,10 @@ public final class ToolRegistry {
         return result;
     }
 
-    private boolean disabled(String name) {
+    /** Disabled by name, or a tool that changes the game while access.readOnly is on. */
+    private boolean hidden(McpTool tool) {
         McpConfig config = policy.get();
-        return config != null && config.toolDisabled(name);
+        return config != null && (config.toolDisabled(tool.name()) || config.readOnly() && tool.kind() != McpTool.Kind.READ);
     }
 
     private static long timeoutMs(Map<String, Object> args) {

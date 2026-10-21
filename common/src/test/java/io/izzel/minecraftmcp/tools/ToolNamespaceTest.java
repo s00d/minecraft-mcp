@@ -43,7 +43,7 @@ class ToolNamespaceTest {
 
         Set<String> unprefixed = new TreeSet<>(client);
         unprefixed.retainAll(server);
-        assertEquals(Set.of("mc.debug.capabilities", "mc.schematic.info",
+        assertEquals(Set.of("mc.batch", "mc.crash.latest", "mc.debug.capabilities", "mc.mods.list", "mc.registry.list", "mc.schematic.info",
             "mc.scenario.batch.run", "mc.scenario.report"), unprefixed);
 
         for (String serverOnly : List.of("mc.server.state", "mc.server.command.run",

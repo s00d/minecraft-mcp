@@ -190,4 +190,34 @@ public final class ClientCompat {
                 net.minecraft.world.inventory.ClickType.valueOf(clickType), mc.player);
         //?}
     }
+
+    // --- window
+
+    /** Shows or hides the game window; a hidden one keeps rendering, so screenshots still work. */
+    // 26.3 moved the window from GLFW to SDL3.
+    public static void setWindowVisible(Minecraft mc, boolean visible) {
+        //? if >=26.3 {
+        /*if (visible) org.lwjgl.sdl.SDLVideo.SDL_ShowWindow(windowHandle(mc));
+        else org.lwjgl.sdl.SDLVideo.SDL_HideWindow(windowHandle(mc));
+        *///?} else {
+        if (visible) org.lwjgl.glfw.GLFW.glfwShowWindow(windowHandle(mc));
+        else org.lwjgl.glfw.GLFW.glfwHideWindow(windowHandle(mc));
+        //?}
+    }
+
+    public static boolean windowVisible(Minecraft mc) {
+        //? if >=26.3 {
+        /*return (org.lwjgl.sdl.SDLVideo.SDL_GetWindowFlags(windowHandle(mc)) & org.lwjgl.sdl.SDLVideo.SDL_WINDOW_HIDDEN) == 0;
+        *///?} else {
+        return org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(windowHandle(mc), org.lwjgl.glfw.GLFW.GLFW_VISIBLE) != 0;
+        //?}
+    }
+
+    private static long windowHandle(Minecraft mc) {
+        //? if >=1.21.9 {
+        return mc.getWindow().handle();
+        //?} else {
+        /*return mc.getWindow().getWindow();
+        *///?}
+    }
 }

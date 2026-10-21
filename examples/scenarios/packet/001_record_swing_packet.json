@@ -19,7 +19,7 @@
     {
       "tool": "mc.client.player.swing",
       "args": {
-        "hand": "main_hand"
+        "hand": "main"
       }
     },
     {

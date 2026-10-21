@@ -6,33 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class McpTools {
-    private static final Map<String, Object> OBJECT_SCHEMA = Map.of("type", "object");
-
     private McpTools() {
-    }
-
-    public static McpTool simple(String name, String description, ToolBody body) {
-        return simple(name, description, OBJECT_SCHEMA, body);
-    }
-
-    public static McpTool simple(String name, String description, Map<String, Object> inputSchema, ToolBody body) {
-        return new McpTool() {
-            public String name() {
-                return name;
-            }
-
-            public String description() {
-                return description;
-            }
-
-            public Map<String, Object> inputSchema() {
-                return inputSchema;
-            }
-
-            public Object call(Map<String, Object> arguments) throws Exception {
-                return body.call(arguments);
-            }
-        };
     }
 
     /**
@@ -50,6 +24,7 @@ public final class McpTools {
         schema.put("type", "object");
         schema.put("properties", properties);
         if (!required.isEmpty()) schema.put("required", required);
+        schema.put("additionalProperties", false);
         return new McpTool() {
             public String name() {
                 return name;
@@ -82,6 +57,43 @@ public final class McpTools {
 
     public static McpTool tool(String name, String description, ToolBody body) {
         return tool(name, description, List.of(), body);
+    }
+
+    /** The same tool, marked as only reading the game. */
+    public static McpTool read(McpTool tool) {
+        return new Forwarding(tool, McpTool.Kind.READ, tool::call);
+    }
+
+    /** The same tool, marked as able to destroy something (blocks, items, the server itself). */
+    public static McpTool destructive(McpTool tool) {
+        return new Forwarding(tool, McpTool.Kind.DESTRUCTIVE, tool::call);
+    }
+
+    /** The same tool (name, schema, argument check, kind) with another body. */
+    public static McpTool withBody(McpTool tool, ToolBody body) {
+        return new Forwarding(tool, tool.kind(), body);
+    }
+
+    private record Forwarding(McpTool tool, McpTool.Kind kind, ToolBody body) implements McpTool {
+        public String name() {
+            return tool.name();
+        }
+
+        public String description() {
+            return tool.description();
+        }
+
+        public Map<String, Object> inputSchema() {
+            return tool.inputSchema();
+        }
+
+        public void checkArguments(Map<String, Object> arguments) {
+            tool.checkArguments(arguments);
+        }
+
+        public Object call(Map<String, Object> arguments) throws Exception {
+            return body.call(arguments);
+        }
     }
 
     public static long longArg(Map<String, Object> arguments, String key, long fallback) {

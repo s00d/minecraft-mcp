@@ -155,8 +155,18 @@ class McpHttpTransportTest {
         var anonymous = post("{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"ping\"}", Map.of());
         assertEquals(200, anonymous.statusCode());
         Map<?, ?> entry = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) Json.parse(Files.readString(gameDir.resolve("mcp/mcp.json"))))
-            .get("mcpServers")).get("minecraft");
+            .get("mcpServers")).get("minecraft-" + server.port());
         assertEquals(Map.of("type", "http", "url", url), entry);
+    }
+
+    @Test
+    void eachRunningInstanceIsListedUntilItStops() throws Exception {
+        Path listing = Path.of(System.getProperty("user.home"), ".minecraft-mcp", "instances", server.port() + ".json");
+        Map<?, ?> instance = (Map<?, ?>) Json.parse(Files.readString(listing));
+        assertEquals(url, instance.get("url"));
+        assertEquals(gameDir.toAbsolutePath().toString(), instance.get("gameDir"));
+        server.close();
+        assertFalse(Files.exists(listing));
     }
 
     @Test
@@ -168,7 +178,7 @@ class McpHttpTransportTest {
         assertEquals(401, anonymous.statusCode());
         assertEquals(200, post("{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"ping\"}", Map.of()).statusCode());
         Map<?, ?> entry = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) Json.parse(Files.readString(gameDir.resolve("mcp/mcp.json"))))
-            .get("mcpServers")).get("minecraft");
+            .get("mcpServers")).get("minecraft-" + server.port());
         assertEquals(Map.of("Authorization", "Bearer hunter2"), entry.get("headers"));
     }
 

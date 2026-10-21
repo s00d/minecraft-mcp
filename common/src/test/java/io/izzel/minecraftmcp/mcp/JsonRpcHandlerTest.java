@@ -3,6 +3,7 @@ package io.izzel.minecraftmcp.mcp;
 import io.izzel.minecraftmcp.json.Json;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -49,7 +50,7 @@ class JsonRpcHandlerTest {
     @Test
     void failingToolIsReportedAsIsErrorContentNotAJsonRpcError() {
         ToolRegistry registry = new ToolRegistry();
-        registry.register(McpTools.simple("mc.boom", "always throws", args -> {
+        registry.register(McpTools.tool("mc.boom", "always throws", args -> {
             throw new IllegalStateException("kaboom");
         }));
         JsonRpcHandler handler = new JsonRpcHandler(registry);
@@ -66,7 +67,7 @@ class JsonRpcHandlerTest {
     @Test
     void interruptedToolRestoresTheInterruptFlagAndReportsIsError() {
         ToolRegistry registry = new ToolRegistry();
-        registry.register(McpTools.simple("mc.hang", "always interrupted", args -> {
+        registry.register(McpTools.tool("mc.hang", "always interrupted", args -> {
             throw new InterruptedException("interrupted mid-call");
         }));
         JsonRpcHandler handler = new JsonRpcHandler(registry);
@@ -83,6 +84,7 @@ class JsonRpcHandlerTest {
     }
 
     private static McpTool echoTool() {
-        return McpTools.simple("mc.echo", "Echo test tool", arguments -> Map.of("echo", arguments.get("message")));
+        return McpTools.tool("mc.echo", "Echo test tool", List.of(Param.string("message", "text to echo")),
+            arguments -> Map.of("echo", arguments.get("message")));
     }
 }

@@ -27,8 +27,8 @@ class McpPluginMessageHandlerTrustTest {
 
     private static ToolRegistry registry(McpConfig config) {
         ToolRegistry registry = new ToolRegistry(() -> config);
-        registry.register(McpTools.simple("mc.server.state", "state", args -> Map.of("running", true)));
-        registry.register(McpTools.simple("mc.server.log.tail", "log", args -> Map.of("lines", List.of())));
+        registry.register(McpTools.tool("mc.server.state", "state", args -> Map.of("running", true)));
+        registry.register(McpTools.tool("mc.server.log.tail", "log", args -> Map.of("lines", List.of())));
         return registry;
     }
 
@@ -251,7 +251,7 @@ class McpPluginMessageHandlerTrustTest {
         CountDownLatch answered = new CountDownLatch(1);
 
         ToolRegistry registry = new ToolRegistry();
-        registry.register(McpTools.simple("mc.server.state", "state", args -> {
+        registry.register(McpTools.tool("mc.server.state", "state", args -> {
             calledOn.set(Thread.currentThread());
             return Map.of("running", true);
         }));

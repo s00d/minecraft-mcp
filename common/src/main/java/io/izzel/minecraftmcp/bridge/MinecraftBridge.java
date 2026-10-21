@@ -1,5 +1,6 @@
 package io.izzel.minecraftmcp.bridge;
 
+import io.izzel.minecraftmcp.concurrent.TickCounter;
 import io.izzel.minecraftmcp.condition.ConditionContext;
 import io.izzel.minecraftmcp.condition.ConditionEvaluator;
 import io.izzel.minecraftmcp.condition.ConditionExpression;
@@ -61,16 +62,23 @@ public interface MinecraftBridge {
         }
     }
 
-    default void waitTicks(long ticks) {
-        requireOffGameThread("waiting " + ticks + " ticks");
+    /** The real ticks of this side, counted by the loader's end-of-tick event. */
+    TickCounter ticks();
+
+    /** Waits for {@code ticks} real ticks (half a second each at most); returns how many passed. */
+    default long awaitTicks(long ticks) {
+        requireOffGameThread("waiting " + ticks + " " + side() + " ticks");
         if (ticks > MAX_WAIT_TICKS) {
             throw new IllegalArgumentException("cannot wait " + ticks + " ticks; the limit is " + MAX_WAIT_TICKS);
         }
-        try {
-            Thread.sleep(Math.max(0, ticks) * 50L);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while waiting " + ticks + " ticks", e);
+        long requested = Math.max(0, ticks);
+        return ticks().await(requested, Math.max(1000L, requested * 500L));
+    }
+
+    default void waitTicks(long ticks) {
+        long waited = awaitTicks(ticks);
+        if (waited < ticks) {
+            throw new IllegalStateException("only " + waited + " of " + ticks + " " + side() + " ticks passed; the game is not ticking");
         }
     }
 

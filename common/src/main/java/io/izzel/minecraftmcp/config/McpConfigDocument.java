@@ -35,11 +35,14 @@ public final class McpConfigDocument {
               "endpoint": {
                 "_comment": [
                   "REQUIRES A RESTART. bind/port/authToken: the local MCP endpoint. port 0 uses",
-                  "  25580 on a client and 25581 on a server, or a free one when that is taken; a",
-                  "  blank authToken is minted once and kept in mcp/token. The server has already",
-                  "  bound and published its token by the time you could edit this.",
-                  "headless: advertised in mc.debug.capabilities so an agent knows this is a",
-                  "  virtual display. Informational only."
+                  "  25580 on a client and 25581 on a server, or a free one when that is taken.",
+                  "  A blank authToken on a loopback bind means no token: any local program may",
+                  "  connect, browsers are refused by the Origin check. Set one to require it; a",
+                  "  non-loopback bind with a blank one mints a token once into mcp/token.",
+                  "  mcp/mcp.json always holds a ready MCP client entry for this endpoint.",
+                  "headless: hide the game window once the game started (it keeps rendering, so",
+                  "  screenshots work; mc.client.window shows it again) and say so in",
+                  "  mc.debug.capabilities. For automated runs: no stray clicks, no focus theft."
                 ],
                 "bind": "127.0.0.1",
                 "port": 0,
@@ -58,6 +61,8 @@ public final class McpConfigDocument {
               "access": {
                 "_comment": [
                   "TAKES EFFECT ON RESTART on Fabric; live on NeoForge.",
+                  "readOnly: serve only tools that read the game (state, screens, chat, inventory,",
+                  "  screenshots, waits); everything that acts on it is absent, as if disabled.",
                   "disabledTools: tools this process refuses to serve, by exact name or a",
                   "  trailing-* prefix. Applies everywhere, including the local HTTP endpoint:",
                   "  a disabled tool is absent from tools/list and tools/call answers -32602.",
@@ -71,6 +76,7 @@ public final class McpConfigDocument {
                   "  channel needs the minecraft_mcp:remote.call permission, which defaults to",
                   "  owner level and is granted by a permission mod."
                 ],
+                "readOnly": false,
                 "disabledTools": [],
                 "trustedServers": []
               }

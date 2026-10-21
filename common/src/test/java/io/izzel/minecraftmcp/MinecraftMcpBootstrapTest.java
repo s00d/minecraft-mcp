@@ -3,6 +3,7 @@ package io.izzel.minecraftmcp;
 import io.izzel.minecraftmcp.bridge.FakeClientBridge;
 import io.izzel.minecraftmcp.bridge.FakeServerBridge;
 import io.izzel.minecraftmcp.bridge.MinecraftServerBridge;
+import io.izzel.minecraftmcp.mcp.McpTool;
 import io.izzel.minecraftmcp.mcp.ToolRegistry;
 import io.izzel.minecraftmcp.tools.BuiltinServerTools;
 import org.junit.jupiter.api.Test;
@@ -16,15 +17,24 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MinecraftMcpBootstrapTest {
     @Test
-    void withoutALocalServerTheToolAnswersWithAHintInsteadOfFailing() throws Exception {
+    void withoutALocalServerTheToolFailsWithAHint() {
         ToolRegistry registry = new ToolRegistry();
         MinecraftMcpBootstrap.registerIntegratedServerTools(registry, new FakeIntegratedClient());
 
-        Map<?, ?> result = assertInstanceOf(Map.class, registry.call("mc.server.state", Map.of()));
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> registry.call("mc.server.state", Map.of()));
 
-        assertEquals("no_local_server", result.get("error"));
-        assertEquals("client", result.get("side"));
-        assertTrue(String.valueOf(result.get("hint")).contains("mc.remote.call"), String.valueOf(result.get("hint")));
+        assertTrue(error.getMessage().startsWith("no_local_server"), error.getMessage());
+        assertTrue(error.getMessage().contains("mc.remote.call"), error.getMessage());
+    }
+
+    @Test
+    void theMirroredToolsKeepTheirArgumentCheckAndKind() {
+        ToolRegistry registry = new ToolRegistry();
+        MinecraftMcpBootstrap.registerIntegratedServerTools(registry, new FakeIntegratedClient());
+
+        assertThrows(IllegalArgumentException.class, () -> registry.find("mc.server.block.state").orElseThrow().checkArguments(Map.of("nope", 1)));
+        assertEquals(McpTool.Kind.READ, registry.find("mc.server.state").orElseThrow().kind());
+        assertEquals(McpTool.Kind.DESTRUCTIVE, registry.find("mc.server.shutdown").orElseThrow().kind());
     }
 
     @Test
@@ -33,15 +43,11 @@ class MinecraftMcpBootstrapTest {
         ToolRegistry registry = new ToolRegistry();
         MinecraftMcpBootstrap.registerIntegratedServerTools(registry, client);
 
-        Map<?, ?> before = assertInstanceOf(Map.class, registry.call("mc.server.state", Map.of()));
+        assertThrows(IllegalStateException.class, () -> registry.call("mc.server.state", Map.of()));
         client.server = new FakeIntegratedServer();
-        Object joined = registry.call("mc.server.state", Map.of());
+        assertEquals(Map.of("running", true, "integrated", true), registry.call("mc.server.state", Map.of()));
         client.server = null;
-        Map<?, ?> left = assertInstanceOf(Map.class, registry.call("mc.server.state", Map.of()));
-
-        assertEquals("no_local_server", before.get("error"));
-        assertEquals(Map.of("running", true, "integrated", true), joined);
-        assertEquals("no_local_server", left.get("error"));
+        assertThrows(IllegalStateException.class, () -> registry.call("mc.server.state", Map.of()));
     }
 
     @Test

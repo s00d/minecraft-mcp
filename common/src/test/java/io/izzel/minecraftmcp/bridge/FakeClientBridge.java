@@ -3,6 +3,11 @@ package io.izzel.minecraftmcp.bridge;
 import java.nio.file.Path;
 
 public class FakeClientBridge implements MinecraftClientBridge {
+    @Override
+    public io.izzel.minecraftmcp.concurrent.TickCounter ticks() {
+        return FakeTicks.RUNNING;
+    }
+
     protected final FakeGameThread gameThread = new FakeGameThread();
 
     public void onGameThread(Runnable task) {

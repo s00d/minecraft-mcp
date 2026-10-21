@@ -2,7 +2,7 @@ package io.izzel.minecraftmcp.bridge;
 
 import io.izzel.minecraftmcp.packet.PacketRecorder;
 import io.izzel.minecraftmcp.packet.PacketRecorders;
-import io.izzel.minecraftmcp.server.ServerTickCounter;
+import io.izzel.minecraftmcp.concurrent.TickCounter;
 
 import java.util.Map;
 
@@ -24,17 +24,8 @@ public interface MinecraftServerBridge extends MinecraftBridge {
     }
 
     @Override
-    default void waitTicks(long ticks) {
-        awaitTicks(ticks);
-    }
-
-    default long awaitTicks(long ticks) {
-        requireOffGameThread("waiting " + ticks + " server ticks");
-        if (ticks > MAX_WAIT_TICKS) {
-            throw new IllegalArgumentException("cannot wait " + ticks + " server ticks; the limit is " + MAX_WAIT_TICKS);
-        }
-        long requested = Math.max(0, ticks);
-        return ServerTickCounter.await(requested, Math.max(1000L, requested * 500L));
+    default TickCounter ticks() {
+        return TickCounter.SERVER;
     }
 
     Map<String, Object> serverState();
@@ -87,8 +78,19 @@ public interface MinecraftServerBridge extends MinecraftBridge {
         throw new UnsupportedOperationException("Tick statistics are not implemented by " + loader());
     }
 
-    default Map<String, Object> tailLog(int lines) {
-        throw new UnsupportedOperationException("Log tailing is not implemented by " + loader());
+    /** Day time of a dimension; set or add (ticks) change it the way /time does. */
+    default Map<String, Object> time(String dimension, Long set, Long add) {
+        throw new UnsupportedOperationException("Time control is not implemented by " + loader());
+    }
+
+    /** The /tick controls: tick rate, freeze, step frozen ticks, sprint ticks as fast as possible. Null leaves one alone. */
+    default Map<String, Object> tickRate(Float rate, Boolean frozen, Integer step, Integer sprint) {
+        throw new UnsupportedOperationException("Tick control is not implemented by " + loader());
+    }
+
+    /** Reloads data packs (recipes, tags, loot tables, functions) like /reload; completes when done. */
+    default java.util.concurrent.CompletableFuture<Map<String, Object>> reload() {
+        throw new UnsupportedOperationException("Reload is not implemented by " + loader());
     }
 
     default Map<String, Object> exportSchematic(Map<String, Object> args) {
