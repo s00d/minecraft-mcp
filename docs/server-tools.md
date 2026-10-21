@@ -7,8 +7,11 @@ a dedicated server, and a singleplayer client's integrated server — meet at on
 
 ## Resolved per call, not held
 
-A dedicated server's loader implements `MinecraftServerBridge` directly. On a client,
-`IntegratedServerBridge` implements it over `MinecraftClientBridge.integratedServerBridge()`:
+Both loaders back a server with the same `server/VanillaServerBridge`, which drives a
+`MinecraftServer` through vanilla classes only; a dedicated server's endpoint uses one directly. On a
+client, `IntegratedServerBridge` implements `MinecraftServerBridge` over
+`MinecraftClientBridge.integratedServerBridge()` (a `VanillaServerBridge` around the singleplayer
+server, or null):
 world-touching calls forward to whatever that returns, while identity (`loader()`,
 `minecraftVersion()`, `gameDirectory()`) answers from the client bridge itself — that, and the
 hardcoded `dedicated()` below, is what lets the wrapper answer at the title screen with no server
@@ -18,23 +21,23 @@ That lookup happens **per call**, because the integrated server appears and disa
 enters and leaves worlds. There is no cached delegate to go stale: `require()` asks the client bridge
 every time and throws if there is nothing there.
 
-`present()` is the non-throwing form, and it is what lets a client endpoint answer with data rather
-than an exception. `mc.server.*` is registered on a client endpoint unconditionally, even at the title
-screen — whether a world is open is runtime state, and a `tools/list` that changes underneath an agent
-is worse than a tool that explains itself. With no integrated server the call returns a structured
-`no_local_server` error.
+`present()` is the non-throwing form, which the client endpoint's wrapper checks before every call.
+`mc.server.*` is registered on a client endpoint unconditionally, even at the title screen — whether a
+world is open is runtime state, and a `tools/list` that changes underneath an agent is worse than a
+tool that explains itself. With no integrated server the call fails (`isError: true`) with a
+`no_local_server` message that points at `mc.remote.call`.
 
-`dedicated()` is how a tool tells the two apart. It defaults to `true` on the interface, the loaders
-override it with `MinecraftServer#isDedicatedServer()`, and `IntegratedServerBridge` hardcodes `false`.
+`dedicated()` is how a tool tells the two apart. It defaults to `true` on the interface,
+`VanillaServerBridge` answers `MinecraftServer#isDedicatedServer()`, and `IntegratedServerBridge`
+hardcodes `false`.
 
 ## Waiting for ticks that happened
 
-`MinecraftBridge.waitTicks` sleeps `ticks * 50`ms. That only approximates a tick and says nothing
-about whether the server advanced, and chaining `submit(...)` does not help either, because those
-tasks are drained inside the current tick. So `MinecraftServerBridge` overrides `waitTicks` to go
-through `ServerTickCounter`, which both loaders feed from their end-of-tick event — the one place in
-the bridge hierarchy where a parent default is deliberately replaced rather than inherited (see the
-[Minecraft bridges](minecraft-bridges.md) note).
+Sleeping `ticks * 50`ms only approximates a tick and says nothing about whether the server advanced,
+and chaining `submit(...)` does not help either, because those tasks are drained inside the current
+tick. So `MinecraftBridge.awaitTicks` waits on the side's `TickCounter` (`concurrent/TickCounter`),
+which both loaders feed from their end-of-tick event, and returns how many ticks it saw. The
+[Minecraft bridges](minecraft-bridges.md) note has the shared side of that.
 
 Two consequences the tool result exposes:
 
@@ -45,7 +48,7 @@ Two consequences the tool result exposes:
   server times out rather than hanging the MCP call.
 
 "Paused" is the case worth naming, because vanilla arranges for it. An empty server stops ticking
-after `pause-when-empty-seconds`, 60 by default, and a paused server never feeds `ServerTickCounter`,
+after `pause-when-empty-seconds`, 60 by default, and a paused server never feeds its `TickCounter`,
 so `mc.server.ticks.wait` burns its whole ceiling and comes back with `waitedTicks: 0` — the same
 result as a counter that was never wired up at all. A dev server that nothing is connected to needs
 `pause-when-empty-seconds=0` in its `server.properties` for tick waits to mean anything.
@@ -68,8 +71,8 @@ failure, say. That is a different outcome from a command that ran and failed, an
 ## Shapes that were chosen
 
 `ServerWorldTools` holds these as static methods over a `MinecraftServer` — the arrangement
-`ServerSchematicTools` established, static helpers the loader bridges forward to with no logic of
-their own. A few of its results look arbitrary and are not:
+`ServerSchematicTools` established, static helpers `VanillaServerBridge` forwards to with no logic of
+its own. A few of its results look arbitrary and are not:
 
 - `worldSnapshot` keeps the client `world` property's field names on purpose, so a condition
   expression like `world.dimension` ports between the two sides. The
@@ -80,9 +83,18 @@ their own. A few of its results look arbitrary and are not:
   nothing public on `ServerChunkCache` hands either of them out, so it reports `hasActiveTickets` and
   stops there.
 
+## Time, speed and reloads
+
+`ServerTime` backs `mc.server.time`, `mc.server.tick` and `mc.server.reload` through the vanilla
+`ServerTickRateManager` and data-pack reload, the same paths as `/time`, `/tick` and `/reload`.
+`step` only works while frozen and says so instead of doing nothing. `sprint` with `wait` (the
+default) blocks on the `TickCounter` until the sprinted ticks really ran, then reports
+`sprintedTicks`, `sprintMs` and `completed`. `mc.server.reload` returns once the reload future
+completes, so a following call sees the new recipes and tags.
+
 ## The scenario batch without a GUI
 
-The batch that `scenario.directory` starts at boot always prints its summary to stdout, because on a
+The batch that `scenario.directory` starts at boot always logs its summary, because on a
 dedicated server there is no GUI and the report would otherwise only live in memory until
 `scenario.batchExit` killed the process. The `mc.scenario.batch.run` tool prints nothing: its report
 goes back to the caller that asked for it.

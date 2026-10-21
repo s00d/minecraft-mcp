@@ -14,15 +14,16 @@ Every loader hands play payloads to the main thread before a handler sees them:
 A tool body inlined there would wait on the very thread that has to satisfy it, and many tools block
 for as long as the caller asks:
 
-- `mc.client.ticks.wait` sleeps `ticks * 50`ms, up to the 24,000-tick cap — twenty minutes.
-- `mc.server.ticks.wait` waits for real ticks through `ServerTickCounter`, which a server thread
-  running the wait could only ever fail: the counter is fed from the tick event it is blocking.
+- `mc.client.ticks.wait` and `mc.server.ticks.wait` wait for real ticks through the side's
+  `TickCounter`, up to the 24,000-tick cap — twenty minutes. A game thread running the wait could only
+  ever fail: the counter is fed from the tick event it is blocking.
 - `mc.client.condition.wait`, `mc.server.condition.wait`, `mc.client.packet.wait` and
   `mc.client.connection.wait_disconnect` poll until their timeout, 30s by default.
 - `mc.client.movement.waypoints` steps the player over many ticks, sleeping between each.
-- `mc.client.command.suggest` waits for the server's reply, and `mc.client.screenshot.take` for a
-  later frame.
-- `mc.scenario.batch.run` blocks without a bound.
+- `mc.client.command.suggest` waits for the server's reply, `mc.client.screenshot.take` for a later
+  frame, and `mc.client.resources.reload` / `mc.server.reload` for the reload to finish.
+- `mc.server.tick` with `sprint` waits for the sprinted ticks, two minutes by default.
+- `mc.scenario.batch.run` and `mc.batch` block for as long as the calls they run.
 - `mc.remote.call` blocks on the peer's reply, so a handler running tool bodies inline on the main
   thread would turn a nested call into a deadlock.
 
@@ -51,13 +52,13 @@ is the only class that names `McpWorkers`, because it is the only one that creat
   wait, and nothing is waiting on its result once the endpoint is gone. The threads are daemons.
 - The pool is unbounded on purpose. A bounded pool would let one blocking tool — a 30s
   `mc.client.condition.wait` is ordinary — starve every other call, and both transports are already
-  gated (HTTP by the bearer token; the plugin channel by the permission node for players and by
-  `trustedServers` for servers).
+  gated (HTTP by the loopback bind, the `Origin` check and a token when one is in force; the plugin
+  channel by the permission node for players and by `trustedServers` for servers).
 
 `McpWorkers.pooled` currently hands out named daemon platform threads, grown on demand and reused
 while idle. The implementation is not part of the contract: on the Java 25 toolchain this project
 targets, swapping it for `Executors.newVirtualThreadPerTaskExecutor()` is a one-line change, and JEP
-491 means the `synchronized`/`wait()` in `ServerTickCounter` would no longer pin a carrier.
+491 means the `synchronized`/`wait()` in `TickCounter` would no longer pin a carrier.
 
 `McpWorkers.direct()` runs each task on the calling thread. It is for tests that assert on what a
 handler produced without polling for another thread to finish. Never use it to back a real endpoint —
@@ -83,10 +84,11 @@ observe the ticks it is itself preventing, so it burns its whole timeout, return
 "nothing happened", and on a dedicated server hands the vanilla watchdog a 60-second tick. The thrown
 `IllegalStateException` names the side and the operation at the point it went wrong.
 
-`waitTicks` and `waitUntil` call it, as does the server bridge's `awaitTicks`. The client bridges
-call it directly from the five operations that block on later work: `takeScreenshot`,
-`destroyBlock`, `commandSuggest` and `moveWaypoints` wait on later ticks; `serverMcpCall` waits on
-the peer's reply.
+`awaitTicks` (and so `waitTicks`) and `waitUntil` call it on both sides. `VanillaClientBridge` calls it
+directly from the four operations that block on later work: `takeScreenshot`, `commandSuggest` and
+`moveWaypoints` wait on later ticks; `serverMcpCall` waits on the peer's reply. `destroyBlock` needs
+no guard: it returns a `FutureResult` and does its work in a `TickCounter.eachTick` task on the game
+thread, so nothing blocks there.
 
 ## Testing
 

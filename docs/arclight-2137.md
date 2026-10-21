@@ -43,14 +43,14 @@ issue stack trace.
 Against a normal Fabric/NeoForge client:
 
 ```bash
-xvfb-run -a ./gradlew :neoforge:runClient -DminecraftMcp.endpoint.port=0 -DminecraftMcp.scenario.batchExit=false
+xvfb-run -a ./gradlew :neoforge:26.1.2:runClient
 ```
 
 Run against the local dev client/integrated server:
 
 ```json
 {
-  "directory": "examples/scenarios/arclight-2137",
+  "directory": "/absolute/path/to/examples/scenarios/arclight-2137",
   "includeTags": ["arclight-2137"],
   "excludeTags": ["manual-setup", "external-server"]
 }

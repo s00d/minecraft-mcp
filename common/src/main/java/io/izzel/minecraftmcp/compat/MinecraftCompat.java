@@ -44,7 +44,8 @@ import net.minecraft.world.level.storage.TagValueOutput;
 /**
  * The Minecraft APIs whose shape changed between the supported versions, behind one signature each.
  * Sources are written for the version Stonecutter is set to; the {@code //?} blocks switch the bodies
- * for the others. Renames that keep their meaning are in {@code gradle/replacements.gradle} instead.
+ * for the others. There are no text replacements: every difference, renames included, is a {@code //? if}
+ * branch here or in {@code ClientCompat}.
  */
 public final class MinecraftCompat {
     private MinecraftCompat() {}

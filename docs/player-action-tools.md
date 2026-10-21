@@ -1,7 +1,11 @@
 # Player action tools
 
 Player action tools perform actions through the client player/game mode path. They do not add
-separate state-query tools; use `mc.client.state` for current player state.
+separate state-query tools; use `mc.client.state` for current player state, and `mc.client.target`
+for what the crosshair hits.
+
+All but `swing` take an optional `timeoutMs` (default 10000) for how long to wait for the action to
+finish, and return `status: "not_in_world"` instead of acting when there is no player.
 
 Implemented actions:
 
@@ -12,7 +16,8 @@ Implemented actions:
 - `mc.client.player.destroy.block`
 - `mc.client.player.drop`
 - `mc.client.player.jump`
-- existing `mc.client.player.swing`
+- `mc.client.player.swing` (`hand`; on 26.3 it only animates, since that protocol has no serverbound
+  swing packet)
 
 ## `mc.client.player.look`
 
@@ -45,7 +50,8 @@ Pitch is clamped to `[-90, 90]`.
 }
 ```
 
-Rotates the player toward the world coordinate and returns the target plus computed yaw/pitch.
+Rotates the player toward the world coordinate and returns `status: "looked_at"`, the target and
+the computed yaw/pitch.
 
 ## `mc.client.player.use_item`
 
@@ -55,8 +61,9 @@ Rotates the player toward the world coordinate and returns the target plus compu
 }
 ```
 
-`hand` accepts `main`, `mainhand`, `off`, `off_hand`, or `offhand`. The loader bridge calls the
-normal client game mode item-use path and swings when the interaction consumes action.
+`hand` is `main` (the default) or `offhand`, matched ignoring case; anything else is refused. The
+bridge calls the normal client game mode item-use path and swings when the interaction consumes
+action. Returns `status: "used"`, the vanilla `result` and `consumesAction`.
 
 ## `mc.client.player.attack.block`
 
@@ -70,7 +77,7 @@ normal client game mode item-use path and swings when the interaction consumes a
 ```
 
 Starts destroying/attacking the target block through the client game mode path and swings the main
-hand. `face` accepts vanilla directions: `up`, `down`, `north`, `south`, `west`, `east`.
+hand. `face` is one of `up` (the default), `down`, `north`, `south`, `west`, `east`.
 
 ## `mc.client.player.destroy.block`
 
@@ -80,13 +87,14 @@ hand. `face` accepts vanilla directions: `up`, `down`, `north`, `south`, `west`,
   "y": 64,
   "z": 0,
   "face": "up",
-  "timeoutMs": 30000
+  "timeoutMs": 10000
 }
 ```
 
-Keeps calling the normal client block destroy path until the target block becomes air. The tool
-returns a `FutureResult`; the registry applies the standard call-level `timeoutMs` and cancels the
-future when that timeout expires. Returns `status: "destroyed"` on success with `attempts` and
+Takes one destroy step per client tick through the normal client block destroy path, the way holding
+the attack button does, until the target block becomes air. The tool returns a `FutureResult`; the
+registry applies the call-level `timeoutMs` (default 10000) and cancels the future, which stops
+breaking, when that timeout expires. Returns `status: "destroyed"` on success with `attempts` and
 `elapsedMs`.
 
 ## `mc.client.player.drop`
@@ -97,7 +105,7 @@ future when that timeout expires. Returns `status: "destroyed"` on success with 
 }
 ```
 
-Drops one selected item when `all=false`, or the selected stack when `all=true`.
+Drops one selected item when `all=false` (the default), or the selected stack when `all=true`.
 
 ## `mc.client.player.jump`
 
@@ -107,7 +115,7 @@ Drops one selected item when `all=false`, or the selected stack when `all=true`.
 
 Calls the player jump action once.
 
-##
+## Sneak and sprint
 
 Sneak and sprint are not standalone player action tools. Use the movement tool parameters instead:
 

@@ -16,6 +16,8 @@ Arguments:
 }
 ```
 
+`command` defaults to `/` and also accepts the name `text`.
+
 Response:
 
 ```json
@@ -51,15 +53,16 @@ Arguments:
 }
 ```
 
-`mc.client.connection.sync` intentionally only accepts `timeoutMs`. It ignores any command-like
-arguments and internally calls the same bridge with command `/`.
+`mc.client.connection.sync` intentionally only accepts `timeoutMs`; any other argument is refused
+like on every tool. It calls the same bridge with command `/` and returns its result with
+`status: "synced"`.
 
 Use after client-to-server setup commands when the next step depends on the server having processed
 prior packets:
 
 ```json
 [
-  { "tool": "mc.client.chat.send", "args": { "message": "/setblock 1 65 0 minecraft:furnace" } },
+  { "tool": "mc.client.command.run", "args": { "command": "/setblock 1 65 0 minecraft:furnace" } },
   { "tool": "mc.client.connection.sync", "args": { "timeoutMs": 30000 } },
   { "tool": "mc.client.block.state", "args": { "x": 1, "y": 65, "z": 0 } }
 ]

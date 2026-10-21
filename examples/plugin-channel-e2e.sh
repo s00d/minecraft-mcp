@@ -6,18 +6,20 @@
 # Deliberately not a Gradle task: Gradle is a poor supervisor for long-running processes, and the
 # server has to stay up while the client talks to it.
 #
-#   ./examples/plugin-channel-e2e.sh [fabric|neoforge]
+#   ./examples/plugin-channel-e2e.sh [fabric|neoforge] [minecraft version, default 1.21.11]
 #
 # Needs a display for the client. Set DISPLAY/XAUTHORITY, or run under xvfb-run.
 # Gradle runs --offline here, so the dependency caches must already be warm: build once online first.
 set -uo pipefail
 
 LOADER="${1:-fabric}"
+MC="${2:-1.21.11}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+RUN="$LOADER/versions/$MC/run"
 
-SERVER_DISCOVERY="$ROOT/$LOADER/run/server/mcp/server.json"
-CLIENT_DISCOVERY="$ROOT/$LOADER/run/client/mcp/server.json"
+SERVER_DISCOVERY="$ROOT/$RUN/server/mcp/server.json"
+CLIENT_DISCOVERY="$ROOT/$RUN/client/mcp/server.json"
 SERVER_LOG="$(mktemp -t mcp-plugin-channel-server-XXXX.log)"
 CLIENT_LOG="$(mktemp -t mcp-plugin-channel-client-XXXX.log)"
 server_pid=""
@@ -86,18 +88,18 @@ check() {
 }
 
 # Reads a field out of a discovery file.
-discovery() { python3 -c "import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$1" "$2"; }
+discovery() { python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get(sys.argv[2], ''))" "$1" "$2"; }
+
+# The Authorization header when the endpoint has a token (none on the default loopback bind).
+auth() { local token; token=$(discovery "$1" authToken); [ -n "$token" ] && printf 'Authorization: Bearer %s' "$token" || printf 'X-No-Auth: 1'; }
 
 # Calls a tool and prints the result JSON. Tool failures come back as isError content, so this
 # returns the raw result and the caller decides.
 call() {
   local file="$1" tool="$2" args="${3:-{\}}"
-  local host port path token
-  host=$(discovery "$file" host); port=$(discovery "$file" port)
-  path=$(discovery "$file" path); token=$(discovery "$file" authToken)
-  curl -s --max-time 60 -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+  curl -s --max-time 60 -H "$(auth "$file")" -H 'Content-Type: application/json' \
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool\",\"arguments\":$args}}" \
-    "http://$host:$port$path" \
+    "$(discovery "$file" url)" \
     | python3 -c "
 import json,sys
 body = json.load(sys.stdin)
@@ -136,9 +138,9 @@ wait_for_file() {
 # max-tick-time is left at the vanilla default. Tool bodies run on McpWorkers, so nothing should hold
 # the server thread for a whole tick, and an armed watchdog turns that regression into a failure here.
 note "preparing the dedicated server run directory"
-write_config "$ROOT/$LOADER/run/server/eula.txt" 'eula=true
+write_config "$ROOT/$RUN/server/eula.txt" 'eula=true
 '
-write_config "$ROOT/$LOADER/run/server/server.properties" 'online-mode=false
+write_config "$ROOT/$RUN/server/server.properties" 'online-mode=false
 level-type=minecraft:flat
 spawn-protection=0
 view-distance=4
@@ -158,48 +160,48 @@ pause-when-empty-seconds=0
 note "writing the access policy for both processes"
 # Restored on exit, so a later `gradlew runServer` does not silently inherit disabledTools.
 if [ "$LOADER" = "neoforge" ]; then
-  write_config "$ROOT/$LOADER/run/server/config/minecraft-mcp.toml" '[access]
+  write_config "$ROOT/$RUN/server/config/minecraft-mcp.toml" '[access]
 	disabledTools = ["mc.server.log.tail"]
 	trustedServers = []
 '
-  write_config "$ROOT/$LOADER/run/client/config/minecraft-mcp.toml" '[access]
+  write_config "$ROOT/$RUN/client/config/minecraft-mcp.toml" '[access]
 	disabledTools = []
 	trustedServers = ["127.0.0.1:25565"]
 '
 else
-  write_config "$ROOT/$LOADER/run/server/config/minecraft-mcp.json" \
+  write_config "$ROOT/$RUN/server/config/minecraft-mcp.json" \
     '{"access":{"disabledTools":["mc.server.log.tail"],"trustedServers":[]}}
 '
-  write_config "$ROOT/$LOADER/run/client/config/minecraft-mcp.json" \
+  write_config "$ROOT/$RUN/client/config/minecraft-mcp.json" \
     '{"access":{"disabledTools":[],"trustedServers":["127.0.0.1:25565"]}}
 '
 fi
 
 # The permission check below only means anything if the player starts out unopped, and this script
 # opts them in as it goes. Restored on exit like the config files.
-snapshot "$ROOT/$LOADER/run/server/ops.json"
-rm -f "$ROOT/$LOADER/run/server/ops.json"
+snapshot "$ROOT/$RUN/server/ops.json"
+rm -f "$ROOT/$RUN/server/ops.json"
 
 note "starting $LOADER dedicated server"
 # Removed before launching, not inside wait_for_file: the server can win the race and write it
 # before the wait starts, and deleting it then would hang the wait for its full timeout.
 rm -f "$SERVER_DISCOVERY" "$CLIENT_DISCOVERY"
-setsid ./gradlew ":$LOADER:runServer" --offline -DminecraftMcp.endpoint.port=0 > "$SERVER_LOG" 2>&1 &
+setsid ./gradlew ":$LOADER:$MC:runServer" --offline > "$SERVER_LOG" 2>&1 &
 server_pid=$!
 wait_for_file "$SERVER_DISCOVERY" "server" || { tail -30 "$SERVER_LOG"; exit 1; }
 
 note "starting $LOADER client"
-setsid ./gradlew ":$LOADER:runClient" --offline -DminecraftMcp.endpoint.port=0 > "$CLIENT_LOG" 2>&1 &
+setsid ./gradlew ":$LOADER:$MC:runClient" --offline > "$CLIENT_LOG" 2>&1 &
 client_pid=$!
 wait_for_file "$CLIENT_DISCOVERY" "client" || { tail -30 "$CLIENT_LOG"; exit 1; }
 
 note "disabledTools applies to the local HTTP endpoint too"
 check "a disabled tool is absent from tools/list" "False" \
   "$(curl -s --max-time 30 \
-      -H "Authorization: Bearer $(discovery "$SERVER_DISCOVERY" authToken)" \
+      -H "$(auth "$SERVER_DISCOVERY")" \
       -H 'Content-Type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
-      "http://$(discovery "$SERVER_DISCOVERY" host):$(discovery "$SERVER_DISCOVERY" port)$(discovery "$SERVER_DISCOVERY" path)" \
+      "$(discovery "$SERVER_DISCOVERY" url)" \
       | python3 -c "import json,sys;print(any(t['name']=='mc.server.log.tail' for t in json.load(sys.stdin)['result']['tools']))")"
 check "calling it is a protocol error, not a tool error" "True" \
   "$(call "$SERVER_DISCOVERY" mc.server.log.tail | python3 -c "import json,sys;print('_rpcError' in json.load(sys.stdin))")"
@@ -212,9 +214,6 @@ client_port=$(discovery "$CLIENT_DISCOVERY" port)
 [ "$server_port" != "$client_port" ] \
   && printf '   ok   ports differ (%s vs %s)\n' "$server_port" "$client_port" \
   || { printf '   FAIL ports collide: %s\n' "$server_port"; failures=$((failures + 1)); }
-[ "$(discovery "$SERVER_DISCOVERY" authToken)" != "$(discovery "$CLIENT_DISCOVERY" authToken)" ] \
-  && printf '   ok   tokens differ\n' \
-  || { printf '   FAIL tokens are identical\n'; failures=$((failures + 1)); }
 
 note "tool sets are side-appropriate"
 check "server has no client tools" "True" \

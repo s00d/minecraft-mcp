@@ -36,7 +36,7 @@ is available. An expression that validates but fails on a particular packet's da
 `summary.hp > 3` where `hp` is absent, so `null` reaches `>`) simply does not match that packet;
 the failure is counted per filter and shown in the recording status.
 
-`direction` may be `both`, `serverbound`, or `clientbound`. `parseBundlePackets` defaults to `true`;
+`direction` may be `serverbound` or `clientbound`; omit it (or pass `both`) for both. `parseBundlePackets` defaults to `true`;
 when enabled, vanilla `BundlePacket` instances are expanded and their `subPackets()` are
 recorded/filtered individually. Set it to `false` to record the bundle wrapper itself.
 
@@ -153,8 +153,8 @@ The recorder is an observer, and failures are contained at three levels.
 `RuntimeException` inside the recorder leaves the packet travelling the pipeline anyway, because a
 broken filter must not be able to stall or kill the connection it is watching — `StackOverflowError`
 is not caught the way the plugin-channel parse paths catch it, since a filter expression's depth is
-its local author's choice, not a peer's. The first failure to escape the recorder prints one line
-to stderr and the handler then suppresses the rest, so a recorder failing on every packet cannot
+its local author's choice, not a peer's. The first failure to escape the recorder logs one warning
+and the handler then suppresses the rest, so a recorder failing on every packet cannot
 flood the log. A named filter that throws never gets that far: one level down,
 `PacketRecorder.record` catches per named filter, so an evaluation failure on a given packet means
 that packet does not match *that* filter, and the packet itself and the other filters are

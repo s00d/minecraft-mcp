@@ -46,8 +46,8 @@ loader's permission API already resolved) and `Server` (identified by the addres
 multiplayer screen).
 
 It names no Minecraft types at all. The same abstraction has to describe "the player who sent this
-request" and "the server this client is connected to", and it has to be constructible from `common`,
-which may not touch `net.minecraft.client`.
+request" and "the server this client is connected to", and it has to be constructible from shared
+`common` code that also loads on a dedicated server, where `net.minecraft.client` does not exist.
 
 The two variants carry different things for a reason. A `Player`'s permission check needs a
 `ServerPlayer` and a loader-specific API, so the loader does the check and reports a boolean. A
@@ -140,6 +140,21 @@ ran tool bodies on the caller's thread is exactly the bug that parameter exists 
 call site has to name the threads it means. The same applies to the caller identity on
 `receiveRequest`: there is no convenience overload, because every receiver is a global payload handler
 and failing to compile is better than silently skipping the check.
+
+## Big messages are sent in parts
+
+A serverbound custom payload may not exceed 32767 bytes, and a tool result such as an inventory dump
+or an inline screenshot easily does. `PayloadChunks` splits any message longer than 8000 characters
+(at most 3 UTF-8 bytes each, so a part stays well under the limit) into parts of the form
+`\u0001<id>:<index>:<count>:<text>`. A whole JSON message never starts with `\u0001`, so short ones
+travel unchanged and both sides tell the two apart without a flag. `RemoteMcpProxy.call` and the
+handler's reply path both send through it.
+
+The handler reassembles on the game thread, after the trust check and before the hand-off: joining
+strings is not parsing, and the worker still gets one complete message. Only a trusted peer's parts
+are kept at all; an untrusted request that arrives in parts is dropped rather than answered, since
+answering would mean holding its parts first. The `Reassembler` is bounded (past eight partial messages
+the oldest is evicted, and a message has at most 1024 parts), so a peer that sends parts which never complete cannot grow it without limit.
 
 ## Channel ids
 

@@ -12,36 +12,28 @@ Unsupported formats such as Sponge v1/v2, MCEdit `.schematic`, and Litematica `.
 
 ## Tool location
 
-Schematic tools are server tools:
-
 ```text
-mc.schematic.info
-mc.server.schematic.export
+mc.schematic.info            every endpoint; reads files under that process's game directory
+mc.server.schematic.export   a server endpoint, or a client with a singleplayer world open
 mc.server.schematic.paste
 ```
 
-From the client MCP endpoint, call them through:
-
-```text
-mc.remote.call
-```
-
-Example:
+A client connected to a dedicated server reaches that server's copies through `mc.remote.call`:
 
 ```json
 {
-  "tool": "mc.schematic.info",
-  "arguments": { "path": "base.schem" },
+  "tool": "mc.server.schematic.export",
+  "arguments": { "from": {"x": 0, "y": 64, "z": 0}, "to": {"x": 15, "y": 79, "z": 15}, "path": "base.schem" },
   "timeoutMs": 30000
 }
 ```
 
-In integrated singleplayer there is no remote peer to call: `mc.remote.call` refuses with an error
-saying to use `mc.server.*` instead, which reaches the same integrated server as a same-JVM call.
+In singleplayer there is no remote peer: `mc.remote.call` refuses with an error saying to use
+`mc.server.*` instead, which reaches the integrated server in the same JVM.
 
 ## Path handling
 
-All schematic paths are resolved under the server game directory's `schematics/` directory.
+All schematic paths are resolved under the game directory's `schematics/` directory.
 
 Examples:
 

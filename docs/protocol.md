@@ -1,16 +1,55 @@
 # Protocol
 
-MCP-compatible JSON-RPC 2.0 over localhost HTTP POST `/mcp`.
+MCP Streamable HTTP at `/mcp` (`LocalHttpMcpServer`, `JsonRpcHandler`). Every JSON-RPC message is one
+`POST` answered with `application/json`; there is no event stream, so `GET` and `DELETE` are `405`. The
+server is stateless: it mints no session ids and sends nothing on its own.
 
-Supported methods:
+## Protocol versions
 
-- `initialize`
-- `tools/list`
-- `tools/call`
+Both eras an MCP client may speak are served on the same URL, told apart by the request itself:
+
+- **`2026-07-28`**: no `initialize`. Every request carries its version in
+  `params._meta["io.modelcontextprotocol/protocolVersion"]`, and over HTTP also in the
+  `MCP-Protocol-Version` header. `server/discover` describes the server (supported versions,
+  capabilities, server info, instructions), and every result carries `resultType: "complete"`. The
+  `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`) `Mcp-Name` headers must agree with the
+  body, or the request is refused with `-32020` and status 400. Another version in `_meta` is
+  `-32022` with the supported list in `data`. An unknown method is `-32601` with status `404`.
+- **`2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`**: an `initialize` handshake negotiates
+  the version (an unknown one gets `2025-11-25`). Notifications get `202` and no body, and a JSON
+  array is answered as a batch, one reply per request in order.
+
+Methods: `server/discover` (or `initialize`), `tools/list`, `tools/call`, `ping`.
 
 Errors follow MCP: an unknown tool name is a JSON-RPC error `-32602`, while a tool that runs and
-fails is a *successful* call whose result carries `isError: true`. Check `isError`, not just the
-transport.
+fails, including one refused for a wrong argument, is a *successful* call whose result carries
+`isError: true` and the reason. Check `isError`, not just the transport. A result is a `text` part
+holding the tool's JSON; `mc.client.screenshot.take` with `inline: true` adds an `image` part.
+
+## HTTP
+
+- **Ports.** `endpoint.port` `0` (the default) means 25580 for a client and 25581 for a server. When
+  that is taken (another game is running) the next free one of the same parity is used, up to ten
+  games per side (25582, 25584, ... / 25583, 25585, ...), then a random port.
+- **Origin.** A request with a non-local `Origin` header is `403`, so a web page cannot reach the
+  endpoint through DNS rebinding. Requests without `Origin` (every non-browser client) pass.
+- **Token.** Bound to loopback without `endpoint.authToken`, no token is required. A configured token
+  is always required. Binding to another address without one mints a token once and keeps it in
+  `mcp/token` (owner-only where the OS allows), so it survives restarts. A missing or wrong
+  `Authorization: Bearer <token>` is `401` with `WWW-Authenticate: Bearer`.
+
+## Discovery files
+
+Each start writes, under the game directory:
+
+- `mcp/server.json`: `protocol`, `transport` (`streamable-http`), `url`, `host`, `port`, `path`,
+  `authToken` (only when a token is in force), `side`, `loader`, `minecraftVersion`, `capabilities`.
+- `mcp/mcp.json`: a ready `mcpServers` entry (`type: "http"`, `url`, and the `Authorization` header
+  when there is a token). It is named `minecraft` on a client and `minecraft-server` on a server, or
+  `minecraft-<port>` when this game did not get its side's default port.
+
+And `~/.minecraft-mcp/instances/<port>.json` lists every running game: the `server.json` fields plus
+`gameDir` and `pid`. It is removed when the game exits.
 
 ## Tool namespaces
 
@@ -25,21 +64,28 @@ registers no `mc.client.*` at all — they are absent from `tools/list`, not stu
 | `mc.remote.*` | Reach the *other* process over the plugin channel |
 
 Read `mcp/server.json` under the game directory to tell endpoints apart; it carries `side`,
-`loader`, `minecraftVersion` and `capabilities` alongside the port and token.
+`loader`, `minecraftVersion` and `capabilities` alongside the URL.
+
+Every tool has a kind, read, action or destructive, which `tools/list` reports as the annotations
+`readOnlyHint` and `destructiveHint` (and `openWorldHint: false`). `access.readOnly` serves only the
+read ones. Input schemas list every argument with its type, description, `enum` and `default`, and
+set `additionalProperties: false`; an argument the tool does not know is refused with the valid
+names rather than ignored.
 
 How the registry behind this split is put together — four registration sets, and a policy consulted
 on every lookup rather than snapshotted — is in the [tool registry](tool-registry.md) note.
 
 ### No prefix
 
-- `mc.debug.capabilities`
+- `mc.debug.capabilities`, `mc.batch`
+- `mc.mods.list`, `mc.registry.list`, `mc.crash.latest`
 - `mc.schematic.info`
-- `mc.scenario.batch.run`
-- `mc.scenario.report`
+- `mc.scenario.batch.run`, `mc.scenario.report`
 
 ### `mc.client.*`
 
-- State: `mc.client.state`, `mc.client.vehicle.state`, `mc.client.world.snapshot`
+- State: `mc.client.state`, `mc.client.vehicle.state`, `mc.client.world.snapshot`,
+  `mc.client.target`, `mc.client.entities.nearby`, `mc.client.blocks.find`
 - Screens: `mc.client.screen.current`, `mc.client.screen.state`, `mc.client.screen.text.type`,
   `mc.client.screen.click.at`, `mc.client.screen.widget.click`
 - Input: `mc.client.keyboard.press`, `mc.client.keyboard.hold`, `mc.client.movement.waypoints`
@@ -50,10 +96,12 @@ on every lookup rather than snapshotted — is in the [tool registry](tool-regis
 - World: `mc.client.world.join`, `mc.client.world.leave`, `mc.client.block.state`,
   `mc.client.block.interact`
 - Connection: `mc.client.connection.connect`, `.state`, `.sync`, `.wait_disconnect`
-- Chat and commands: `mc.client.chat.send`, `mc.client.command.run`, `mc.client.command.suggest`
+- Chat and commands: `mc.client.chat.send`, `.read`, `.wait`, `mc.client.command.run`,
+  `mc.client.command.suggest`
 - Packets: `mc.client.packet.recording.start`, `.stop`, `.clear`, `.status`,
   `mc.client.packet.dump`, `mc.client.packet.wait`
-- Other: `mc.client.screenshot.take`, `mc.client.ticks.wait`, `mc.client.condition.wait`
+- Other: `mc.client.screenshot.take`, `mc.client.window`, `mc.client.resources.reload`,
+  `mc.client.log.tail`, `mc.client.ticks.wait` (real client ticks), `mc.client.condition.wait`
 
 `mc.client.state` returns both `inWorld` and `rawInWorld`. `rawInWorld` means the client level and
 player exist; `inWorld` additionally means no loading screen or GUI is blocking normal controls.
@@ -61,6 +109,7 @@ player exist; `inWorld` additionally means no loading screen or GUI is blocking 
 ### `mc.server.*`
 
 - State: `mc.server.state`, `mc.server.tick.stats`, `mc.server.log.tail`, `mc.server.shutdown`
+- Time and speed: `mc.server.time`, `mc.server.tick` (rate, freeze, step, sprint), `mc.server.reload`
 - Players: `mc.server.players`, `mc.server.player.state`, `mc.server.player.inventory`,
   `mc.server.connection.list`
 - World: `mc.server.world.list`, `mc.server.world.snapshot`, `mc.server.block.state`,
@@ -115,7 +164,7 @@ reach a `MinecraftServer` in this one.
 ## Threads
 
 Both transports run tool bodies on the same pool of MCP worker threads, one pool per endpoint. It
-matters because fourteen tools block by design — `mc.server.ticks.wait`, `mc.client.condition.wait`,
+matters because many tools block by design — `mc.server.ticks.wait`, `mc.client.condition.wait`,
 `mc.client.screenshot.take`, `mc.scenario.batch.run`, and `mc.remote.call` itself, which a nested
 call would otherwise deadlock.
 
@@ -150,11 +199,12 @@ All three spellings are derived mechanically from one path, so they stay in lock
 | Path | Default | Notes |
 |---|---|---|
 | `endpoint.bind` | `127.0.0.1` | Restart to change |
-| `endpoint.port` | `0` (a free port) | Restart to change |
-| `endpoint.authToken` | blank (fresh random token per start) | Restart to change; never printed |
-| `endpoint.headless` | `false` | Restart to change; surfaced in `mc.debug.capabilities` only |
+| `endpoint.port` | `0` (25580 client, 25581 server, next free one when taken) | Restart to change |
+| `endpoint.authToken` | blank (no token on loopback; minted into `mcp/token` otherwise) | Restart to change; never printed |
+| `endpoint.headless` | `false` | Restart to change; `true` hides the game window at start (see [headless](headless.md)) |
 | `scenario.directory` | blank (run nothing) | Restart to change |
 | `scenario.batchExit` | `false` | Restart to change |
+| `access.readOnly` | `false` | **Live** on NeoForge; serves only the tools that read |
 | `access.disabledTools` | `[]` | **Live** on NeoForge — takes effect as soon as the file is saved; on Fabric edits need a restart |
 | `access.trustedServers` | `[]` | **Live** on NeoForge; on Fabric edits need a restart |
 
@@ -182,7 +232,8 @@ Why the config code is shaped this way — layers rather than a snapshot, which 
   config/minecraft-mcp.toml is ignored
 ```
 
-That warning only appears when a property or environment variable is masking a value the file also
+The lines go to `logs/latest.log` through the SLF4J logger `Minecraft MCP`, each starting with
+`[Minecraft MCP]` whatever the loader's log pattern, so `grep Picked` finds them. That warning only appears when a property or environment variable is masking a value the file also
 sets — the one case where editing the file looks like it should work and does not.
 
 ## Access control
@@ -263,6 +314,9 @@ what a process is hiding.
 
 Being trusted does not bypass it. A disabled tool is disabled for everyone.
 
+`access.readOnly` hides the same way, by kind instead of name: every tool not marked read-only
+(see [Tool namespaces](#tool-namespaces)) is gone, for local and remote callers alike.
+
 ### `trustedServers`
 
 Matched against `ServerData.ip` — the address **exactly as typed into the multiplayer screen** — by a
@@ -297,8 +351,8 @@ Both files carry both keys. A dedicated server ignores `trustedServers` and a cl
 to authorise, which is the price of one file per process rather than two.
 
 If the file is malformed, everything falls back to the built-in defaults: trust fails **closed**
-(nothing trusted) and `disabledTools` fails **open** (nothing disabled). The HTTP endpoint still has
-its bearer token. The failure is logged, never silent.
+(nothing trusted) and `disabledTools` fails **open** (nothing disabled). The HTTP endpoint keeps its
+loopback bind and `Origin` check. The failure is logged, never silent.
 
 ### `mc.server.command.run` is full admin
 
@@ -316,5 +370,6 @@ config. Disabling `mc.client.*` on a server does nothing to any client. Converse
 ## `mc.server.*` on a client
 
 A client endpoint reaches a `MinecraftServer` only when this process has one, i.e. singleplayer.
-It does **not** silently fall back to the plugin channel: `mc.server.*` always means "this
-process", and reaching another process is always spelled `mc.remote.call`.
+Without one the call fails (`isError: true`) and names `mc.remote.call`. It does **not** silently
+fall back to the plugin channel: `mc.server.*` always means "this process", and reaching another
+process is always spelled `mc.remote.call`.

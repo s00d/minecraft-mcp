@@ -77,9 +77,9 @@ deliberately shared, with a compatible shape, so an expression like `world.dimen
 Client endpoints (`mc.client.condition.wait`):
 
 ```text
-client       lightweight client snapshot: running, inWorld, screen, playerName, position, rotation
-             plus integratedServer (this process has a MinecraftServer) and remoteAvailable
-             (a server is reachable over the plugin channel)
+client       lightweight client snapshot: running, inWorld, rawInWorld, screen, screenTitle,
+             loading, playerName, position, rotation, plus integratedServer (this process has a
+             MinecraftServer) and remoteAvailable (a server is reachable over the plugin channel)
 connection   multiplayer/disconnect state: disconnected, screen, title, message
 screen       current GUI screen state: hasScreen, screen, title, narration, children
 vehicle      player vehicle state: inWorld, isPassenger, vehicle, x, y, z
@@ -96,7 +96,7 @@ server       server state: running, dedicated, motd, players, maxPlayers, versio
 world        overworld snapshot: inWorld, dimension, gameTime, difficulty, players, loadedChunks,
              entityCount
 players      online players: count, names, players
-tick         tick statistics: tickCount, averageTickMs, smoothedTickMs, overloaded
+tick         tick statistics: tickCount, averageTickMs, smoothedTickMs, targetTickMs, overloaded
 packet       reserved, not implemented -- nothing records server-side packets yet, so this always
              reports an idle recorder. Do not write conditions against it.
 ```
@@ -159,7 +159,7 @@ be compiled at evaluation time; its failures are evaluation errors.
 ```text
 client.inWorld == true
 client.inWorld && client.screen == null
-client.inWorld && client.screen == null
+client.loading == false && client.screen != null
 screen.hasScreen && contains(screen.title, "Title")
 connection.disconnected == false
 !vehicle.isPassenger

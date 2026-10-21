@@ -41,7 +41,8 @@ Arguments:
 }
 ```
 
-`section` may be `all`, `hotbar`, `main`, `armor`, or `offhand`.
+`section` is one of `all` (the default), `hotbar`, `main`, `armor`, `offhand`. `limit` caps the
+returned `matches` (default 50); `totalCount` still counts every match.
 
 Returns:
 
@@ -59,7 +60,7 @@ Returns:
 Arguments:
 
 ```json
-{ "item": "minecraft:diamond" }
+{ "item": "minecraft:diamond", "section": "all" }
 ```
 
 Returns:
@@ -135,13 +136,8 @@ Arguments:
 }
 ```
 
-Supported `clickType` values in the first implementation:
-
-```text
-PICKUP
-QUICK_MOVE
-THROW
-```
+`clickType` is one of `PICKUP` (the default), `QUICK_MOVE`, `THROW`; anything else is refused.
+`button` defaults to 0.
 
 Returns:
 
@@ -191,6 +187,15 @@ Returns:
 ```json
 { "status": "closed" }
 ```
+
+## `mc.client.hotbar.select`
+
+```json
+{ "slot": 3 }
+```
+
+Selects hotbar slot 0-8 (`index` is accepted as an alias) and returns `status: "selected"` with the
+slot's item.
 
 ## Runtime notes
 

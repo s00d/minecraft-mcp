@@ -72,8 +72,9 @@ covered by plain unit tests. Only Fabric reads this format; NeoForge goes throug
 real data, which survives a parse untouched and is ignored on the way in.
 
 What a malformed file *means* is the caller's decision, not the parser's, because the two `access`
-settings want opposite answers. `read` throws, and `FabricMcpConfig` falls back to an empty layer —
-which fails closed on `trustedServers` and open on `disabledTools`. There is no "previous layer" to
+lists want opposite answers. `read` throws, and `FabricMcpConfig` falls back to an empty layer —
+which fails closed on `trustedServers` and open on `disabledTools` (and leaves `readOnly` at its
+default, off). There is no "previous layer" to
 keep, because the file is read once at startup.
 
 Two smaller parsing choices: a scalar is stringified rather than type-checked, since `Json` returns

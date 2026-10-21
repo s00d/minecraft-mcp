@@ -23,7 +23,8 @@ Minimal example:
 }
 ```
 
-Step-level `expect` supports dot-path equality and small `contains` / `startsWith` matchers:
+Step-level `expect` supports dot-path equality and small `contains` / `startsWith` / `equals`
+matchers:
 
 ```json
 {
@@ -75,12 +76,18 @@ Run only input scenarios:
 
 Current scenario groups:
 
-- `smoke/`: client readiness, capabilities, current screen, pre-world player state.
+- `smoke/`: client readiness, capabilities, current screen, pre-world player state, screenshot.
 - `input/`: key press / key hold coverage.
 - `assert/`: examples using `expect` assertions.
 - `metadata/`: loader requirements, tags, and expected-failure behavior.
 - `world/`: full-client scenarios that create/join a singleplayer test world, inspect
   player/world/inventory/block state, exercise input in-world, and leave back to title.
+- `client-tools/`, `player-actions/`, `inventory-container/`, `packet/`: one tool group each.
+- `condition/`, `condition-title/`: condition expressions in the world and on the title screen.
+- `server/`, `integrated-server/`, `schematic/`, `schematic-server/`: `mc.server.*` on a dedicated
+  server and through a singleplayer client's integrated server, and schematic round trips.
+- `arclight-1.21.11/`: scenarios for an external Arclight 1.21.11 server; its README describes the
+  harness they expect.
 - `arclight-2137/`: manual-setup reproduction of [Arclight issue
   #2137](https://github.com/IzzelAliz/Arclight/issues/2137) against an external server on
   `127.0.0.1:25565`. The issue was reported on Arclight 1.21.1; the scenarios here use 26.1 entity
