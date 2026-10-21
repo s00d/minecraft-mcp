@@ -1,6 +1,6 @@
 name: Build
 
-# One job builds every Minecraft version for both loaders (Stonecutter nodes), runs the tests and publishes
+# One job builds every Minecraft version for every loader (Stonecutter nodes), runs the tests and publishes
 # the jars as a GitHub release named after the pushed version tag. A manual run only builds and uploads them.
 on:
   push:
@@ -26,6 +26,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # ForgeGradle's Mavenizer decompiles and patches each Forge version once; keep the result between runs.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .gradle/mavenizer
+            ~/.gradle/caches/minecraftforge
+          key: forge-mavenizer-${{ hashFiles('versions/*.properties') }}
+
       - name: Build and test
         run: >
           ./gradlew build
@@ -35,7 +43,7 @@ jobs:
       - name: Collect jars
         run: |
           mkdir dist
-          cp fabric/versions/*/build/libs/*+*.jar neoforge/versions/*/build/libs/*+*.jar dist/
+          cp {fabric,neoforge,forge}/versions/*/build/libs/*+*.jar dist/
           rm -f dist/*-sources.jar
           ls -l dist
 

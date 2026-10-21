@@ -36,7 +36,7 @@ hardcodes `false`.
 Sleeping `ticks * 50`ms only approximates a tick and says nothing about whether the server advanced,
 and chaining `submit(...)` does not help either, because those tasks are drained inside the current
 tick. So `MinecraftBridge.awaitTicks` waits on the side's `TickCounter` (`concurrent/TickCounter`),
-which both loaders feed from their end-of-tick event, and returns how many ticks it saw. The
+which every loader feeds from its end-of-tick event, and returns how many ticks it saw. The
 [Minecraft bridges](minecraft-bridges.md) note has the shared side of that.
 
 Two consequences the tool result exposes:

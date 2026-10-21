@@ -3,6 +3,7 @@ plugins {
     id("net.fabricmc.fabric-loom") version "1.17.17" apply false
     id("net.fabricmc.fabric-loom-remap") version "1.17.17" apply false
     id("net.neoforged.moddev") version "2.0.148" apply false
+    id("net.minecraftforge.gradle") version "7.0.40" apply false
 }
 
 // The version the sources in git are written for; "Set active project" in the IDE rewrites them.

@@ -2,7 +2,7 @@
 
 `MinecraftBridge` is what a client bridge and a server bridge have in common; the two
 sub-interfaces `MinecraftClientBridge` and `MinecraftServerBridge` add the side-specific surface. The
-implementations are shared by both loaders: `client/VanillaClientBridge` (abstract; each loader
+implementations are shared by every loader: `client/VanillaClientBridge` (abstract; each loader
 subclasses it only for its paths, networking and server bridge) and `server/VanillaServerBridge`,
 both written against vanilla classes. The code shows only the result, so this note records the
 boundary and the contracts that are easy to break by accident.

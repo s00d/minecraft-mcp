@@ -2,7 +2,6 @@ package io.izzel.minecraftmcp.neoforge;
 
 import io.izzel.minecraftmcp.MinecraftMcpBootstrap;
 import io.izzel.minecraftmcp.client.VanillaClientBridge;
-import io.izzel.minecraftmcp.config.ChannelCaller;
 import io.izzel.minecraftmcp.chat.ChatLog;
 import io.izzel.minecraftmcp.config.McpConfigs;
 import io.izzel.minecraftmcp.serverlink.McpPluginMessageHandler;
@@ -84,7 +83,6 @@ public final class NeoForgeMinecraftMcpClientMod {
             return NetworkRegistry.hasChannel(mc.getConnection().getConnection(), ConnectionProtocol.PLAY,
                     NeoForgeStringPayload.REQUEST.id());
         }
-        protected ChannelCaller currentServerCaller() { return NeoForgeClientTrust.currentServerCaller(); }
         protected void sendToServer(String text) {
             //? if >=1.21.6 {
             net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NeoForgeStringPayload(NeoForgeStringPayload.REQUEST, text));

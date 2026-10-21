@@ -52,7 +52,25 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
     protected abstract boolean remoteChannelOpen();
 
     /** The connected server as a plugin channel peer; only called while remoteChannelOpen(). */
-    protected abstract io.izzel.minecraftmcp.config.ChannelCaller currentServerCaller();
+    protected io.izzel.minecraftmcp.config.ChannelCaller currentServerCaller() {
+        return serverCaller(mc);
+    }
+
+    /** Who the connected server is for the trust check: singleplayer, or the address as typed in the server list. */
+    public static io.izzel.minecraftmcp.config.ChannelCaller serverCaller(Minecraft mc) {
+        var listener = mc.getConnection();
+        if (listener == null) {
+            return new io.izzel.minecraftmcp.config.ChannelCaller.Server("not-connected");
+        }
+        if (listener.getConnection().isMemoryConnection() || mc.isLocalServer()) {
+            return new io.izzel.minecraftmcp.config.ChannelCaller.Local("singleplayer");
+        }
+        var data = listener.getServerData();
+        if (data == null || data.ip == null || data.ip.isBlank()) {
+            return new io.izzel.minecraftmcp.config.ChannelCaller.Server("unknown");
+        }
+        return new io.izzel.minecraftmcp.config.ChannelCaller.Server(data.ip);
+    }
 
     /** Sends one MCP request payload to the connected server. */
     protected abstract void sendToServer(String text);

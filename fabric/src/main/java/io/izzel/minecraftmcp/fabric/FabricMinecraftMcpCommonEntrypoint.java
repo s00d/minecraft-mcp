@@ -10,6 +10,11 @@ import java.util.Comparator;
 import java.util.Map;
 
 public final class FabricMinecraftMcpCommonEntrypoint implements ModInitializer {
+    /** "quilt" when Quilt Loader runs this code (it runs Fabric mods and Fabric API), else "fabric". */
+    static String loaderName() {
+        return FabricLoader.getInstance().isModLoaded("quilt_loader") ? "quilt" : "fabric";
+    }
+
     @Override
     public void onInitialize() {
         ServerTickEvents.END_SERVER_TICK.register(server -> TickCounter.SERVER.onTick());

@@ -2,7 +2,6 @@ package io.izzel.minecraftmcp.fabric;
 
 import io.izzel.minecraftmcp.MinecraftMcpBootstrap;
 import io.izzel.minecraftmcp.client.VanillaClientBridge;
-import io.izzel.minecraftmcp.config.ChannelCaller;
 import io.izzel.minecraftmcp.chat.ChatLog;
 import io.izzel.minecraftmcp.config.McpConfigs;
 import io.izzel.minecraftmcp.serverlink.McpPluginMessageHandler;
@@ -37,14 +36,14 @@ public final class FabricMinecraftMcpEntrypoint implements ClientModInitializer 
                 return;
             }
             var responseSender = context.responseSender();
-            clientPluginHandler.receiveRequest(payload.text(), FabricClientTrust.currentServerCaller(context.client()),
+            clientPluginHandler.receiveRequest(payload.text(), VanillaClientBridge.serverCaller(context.client()),
                     response -> responseSender.sendPacket(new FabricStringPayload(FabricStringPayload.CLIENT_RESPONSE, response)));
         });
         ClientPlayNetworking.registerGlobalReceiver(FabricStringPayload.RESPONSE, (payload, context) -> {
             if (clientPluginHandler == null) {
                 return;
             }
-            clientPluginHandler.receiveResponse(payload.text(), FabricClientTrust.currentServerCaller(context.client()));
+            clientPluginHandler.receiveResponse(payload.text(), VanillaClientBridge.serverCaller(context.client()));
         });
         ClientTickEvents.END_CLIENT_TICK.register(client -> TickCounter.CLIENT.onTick());
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> RemoteMcpProxies.toServer().failPending());
@@ -56,10 +55,9 @@ public final class FabricMinecraftMcpEntrypoint implements ClientModInitializer 
         FabricBridge() {
             super(Minecraft.getInstance());
         }
-        public String loader() { return "fabric"; }
+        public String loader() { return FabricMinecraftMcpCommonEntrypoint.loaderName(); }
         public Path gameDirectory() { return FabricLoader.getInstance().getGameDir(); }
         protected boolean remoteChannelOpen() { return ClientPlayNetworking.canSend(FabricStringPayload.REQUEST); }
-        protected ChannelCaller currentServerCaller() { return FabricClientTrust.currentServerCaller(mc); }
         protected void sendToServer(String text) {
             ClientPlayNetworking.send(new FabricStringPayload(FabricStringPayload.REQUEST, text));
         }

@@ -7,7 +7,7 @@ the way it is, which the code itself no longer says.
 ## Layers, not a snapshot
 
 `McpConfig` holds the *layers* rather than a snapshot of resolved values, so a getter reflects what
-the layers answer right now. That is what makes `access.*` live on NeoForge with no reload plumbing
+the layers answer right now. That is what makes `access.*` live on NeoForge and Forge with no reload plumbing
 here: `ModConfigSpec.ConfigValue.get()` caches, but FML clears that cache on every config reload,
 so the next `get()` reads the new file and `McpConfig` has nothing to invalidate and nothing to
 swap. A loader installs one config and never replaces it. Fabric's file layer is the contrast: the

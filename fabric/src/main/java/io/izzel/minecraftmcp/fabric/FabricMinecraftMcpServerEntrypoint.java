@@ -45,7 +45,7 @@ public final class FabricMinecraftMcpServerEntrypoint implements DedicatedServer
                 RemoteMcpProxies.forgetClient(handler.player.getUUID()));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             try {
-                VanillaServerBridge bridge = new VanillaServerBridge(server, "fabric");
+                VanillaServerBridge bridge = new VanillaServerBridge(server, FabricMinecraftMcpCommonEntrypoint.loaderName());
                 endpoint = MinecraftMcpBootstrap.start(bridge);
                 pluginHandler = new McpPluginMessageHandler(endpoint.registry(), McpConfigs::current, endpoint.workers());
                 BuiltinRemoteTools.registerServer(endpoint.registry(), bridge,

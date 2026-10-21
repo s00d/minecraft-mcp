@@ -14,15 +14,16 @@ run commands, control time, record packets, copy builds as schematics and run sc
   `mc.batch` runs many calls in one request, and screenshots come back inline as images.
 - **For mod development.** Loaded mods, registry contents, crash reports, log search, data and resource
   pack reloads, tick sprinting and time control.
-- **Every recent version, both loaders.** One source tree builds NeoForge and Fabric jars for
-  Minecraft 1.21.1 through 26.3.
+- **Every recent version, every loader.** One source tree builds NeoForge, Forge and Fabric jars for
+  Minecraft 1.21.1 through 26.3; the Fabric jar also runs on Quilt.
 
 ## Quick start
 
 **1. Download.** Open the [latest release](../../releases/latest) and download the jar that matches your
-loader and Minecraft version: `minecraft_mcp-<loader>-0.2.0+<minecraft>.jar`, for example
-`minecraft_mcp-fabric-0.2.0+1.21.11.jar` or `minecraft_mcp-neoforge-0.2.0+26.3.jar`. Versions are listed
-[below](#supported-versions).
+loader and Minecraft version: `minecraft_mcp-<loader>-<mod version>+<minecraft>.jar`, for example
+`minecraft_mcp-fabric-0.2.0+1.21.11.jar`, `minecraft_mcp-neoforge-0.2.0+26.3.jar` or
+`minecraft_mcp-forge-0.2.0+1.21.1.jar`. On **Quilt** use the Fabric jar: Quilt Loader runs it with Fabric API,
+and the mod reports `quilt` as its loader. Versions are listed [below](#supported-versions).
 
 **2. Put it in `mods/`** of the game (or server) directory:
 
@@ -34,8 +35,8 @@ loader and Minecraft version: `minecraft_mcp-<loader>-0.2.0+<minecraft>.jar`, fo
 | Prism, MultiMC, CurseForge, Modrinth App | the instance's folder → `mods` (the launcher has an "Open folder" button) |
 | Dedicated server | `mods/` next to the server jar |
 
-Fabric also needs [Fabric API](https://modrinth.com/mod/fabric-api) for the same Minecraft version in
-`mods/`. NeoForge needs nothing else.
+Fabric and Quilt also need [Fabric API](https://modrinth.com/mod/fabric-api) for the same Minecraft
+version in `mods/`. NeoForge and Forge need nothing else.
 
 **3. Start Minecraft** with that loader's profile. The log shows
 `[Minecraft MCP] MCP endpoint at http://127.0.0.1:25580/mcp`.
@@ -52,18 +53,18 @@ clients are under [Connect an agent](#connect-an-agent).
 
 ## Supported versions
 
-| Minecraft | NeoForge | Fabric Loader / Fabric API | Java |
-|---|---|---|---|
-| 1.21.1 | 21.1 | 0.18.4 / 0.116.1 | 21 |
-| 1.21.4 | 21.4 | 0.18.4 / 0.119.4 | 21 |
-| 1.21.8 | 21.8 | 0.18.4 / 0.136.1 | 21 |
-| 1.21.11 | 21.11.42+ | 0.18.4 / 0.141.6 | 21 |
-| 26.1.2 | 26.1 | 0.19.3 / 0.155.2 | 25 |
-| 26.2 | 26.2 | 0.20.1 / 0.161.0 | 25 |
-| 26.3 | 26.3 | 0.20.1 / 0.164.0 | 25 |
+| Minecraft | NeoForge | Forge | Fabric Loader / Fabric API | Quilt Loader | Java |
+|---|---|---|---|---|---|
+| 1.21.1 | 21.1 | 52.1 | 0.18.4 / 0.116.1 | 0.30.1 | 21 |
+| 1.21.4 | 21.4 | 54.1 | 0.18.4 / 0.119.4 | 0.30.1 | 21 |
+| 1.21.8 | 21.8 | 58.1 | 0.18.4 / 0.136.1 | 0.30.1 | 21 |
+| 1.21.11 | 21.11.42+ | 61.2 | 0.18.4 / 0.141.6 | 0.30.1 | 21 |
+| 26.1.2 | 26.1 | 64.1 | 0.19.3 / 0.155.2 | 0.30.1 | 25 |
+| 26.2 | 26.2 | 65.1 | 0.20.1 / 0.161.0 | 0.30.1 | 25 |
+| 26.3 | 26.3 | 66.0 | 0.20.1 / 0.164.0 | 0.30.1 | 25 |
 
-Each jar targets exactly one Minecraft version; the NeoForge and Fabric versions listed are the
-minimums it is built against.
+Each jar targets exactly one Minecraft version; the loader versions listed are the minimums it is built
+against (Quilt: the version it was tested with).
 
 ## Connect an agent
 
@@ -188,8 +189,8 @@ out. Details in [docs/protocol.md](docs/protocol.md#access-control).
 ## Configuration
 
 Every setting resolves through one chain: system property, then environment variable, then config
-file, then built-in default. The config file is `config/minecraft-mcp.toml` (NeoForge) or
-`config/minecraft-mcp.json` (Fabric) and is written with documented defaults on first start. The
+file, then built-in default. The config file is `config/minecraft-mcp.toml` (NeoForge, Forge) or
+`config/minecraft-mcp.json` (Fabric, Quilt) and is written with documented defaults on first start. The
 startup log reports which layer won for each setting.
 
 | Setting | System property / environment variable | Default | |
@@ -200,9 +201,9 @@ startup log reports which layer won for each setting.
 | `endpoint.headless` | `minecraftMcp.endpoint.headless` / `MINECRAFT_MCP_ENDPOINT_HEADLESS` | `false`; `true` hides the game window | restart |
 | `scenario.directory` | `minecraftMcp.scenario.directory` / `MINECRAFT_MCP_SCENARIO_DIRECTORY` | none | run once at startup |
 | `scenario.batchExit` | `minecraftMcp.scenario.batchExit` / `MINECRAFT_MCP_SCENARIO_BATCH_EXIT` | `false` | exit after that batch |
-| `access.readOnly` | `minecraftMcp.access.readOnly` / `MINECRAFT_MCP_ACCESS_READ_ONLY` | `false` | live on NeoForge |
-| `access.disabledTools` | `minecraftMcp.access.disabledTools` / `MINECRAFT_MCP_ACCESS_DISABLED_TOOLS` | none | live on NeoForge |
-| `access.trustedServers` | `minecraftMcp.access.trustedServers` / `MINECRAFT_MCP_ACCESS_TRUSTED_SERVERS` | none | live on NeoForge |
+| `access.readOnly` | `minecraftMcp.access.readOnly` / `MINECRAFT_MCP_ACCESS_READ_ONLY` | `false` | live on NeoForge and Forge |
+| `access.disabledTools` | `minecraftMcp.access.disabledTools` / `MINECRAFT_MCP_ACCESS_DISABLED_TOOLS` | none | live on NeoForge and Forge |
+| `access.trustedServers` | `minecraftMcp.access.trustedServers` / `MINECRAFT_MCP_ACCESS_TRUSTED_SERVERS` | none | live on NeoForge and Forge |
 
 List values given as a property or variable are comma-separated. Full reference in
 [docs/configuration.md](docs/configuration.md).
@@ -240,7 +241,9 @@ Jars land in `<loader>/versions/<minecraft>/build/libs/minecraft_mcp-<loader>-<v
 How the tree is laid out:
 
 - [Stonecutter](https://stonecutter.kikugie.dev) builds every version from one source tree. `common/`,
-  `fabric/` and `neoforge/` are branches; each Minecraft version is a node (`:neoforge:1.21.8`).
+  `fabric/`, `neoforge/` and `forge/` are branches; each Minecraft version is a node (`:forge:1.21.8`).
+  Fabric builds with Loom, NeoForge with ModDevGradle, Forge with ForgeGradle 7 (its first build
+  decompiles each Forge version once, which takes a while).
 - The sources in git are written for the active version, 1.21.11 (`stonecutter.gradle.kts`). The other
   versions build from Stonecutter's processed copy; nothing is checked in per version.
 - What differs between Minecraft versions lives in `common/src/main/java/io/izzel/minecraftmcp/compat/`:
@@ -248,8 +251,8 @@ How the tree is laid out:
   per version with `//? if` comments. The rest of the code names nothing that changes between
   versions.
 - The game-facing code is shared too: `client/VanillaClientBridge` and `server/VanillaServerBridge` drive
-  the game through vanilla classes for both loaders; the loader modules only add their events,
-  networking, config screen and paths.
+  the game through vanilla classes for every loader; the loader modules only add their events,
+  networking, config and paths.
 - Toolchain and dependency versions per Minecraft version are in `versions/<minecraft>.properties`.
 
 To add a Minecraft version: add it to `versions(...)` in `settings.gradle.kts`, add
@@ -258,7 +261,7 @@ compilation fails.
 
 ## Releases
 
-`.github/workflows/build.yml` builds everything in one job. Pushing a version tag publishes the 14 jars
+`.github/workflows/build.yml` builds everything in one job. Pushing a version tag publishes the 21 jars
 as a GitHub release named after the tag, with that tag as the mod version:
 
 ```bash

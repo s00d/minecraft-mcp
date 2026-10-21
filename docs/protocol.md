@@ -167,7 +167,7 @@ matters because many tools block by design — `mc.server.ticks.wait`, `mc.clien
 call would otherwise deadlock.
 
 The game thread is therefore never the one waiting. For the plugin channel that is a deliberate
-hand-off: both loaders deliver play payloads on the main thread, so the handler decides there whether
+hand-off: every loader delivers play payloads on the main thread (Forge through `enqueueWork`), so the handler decides there whether
 the sender is trusted — the only place that state is meaningful — and queues everything else,
 **deserialisation included**. A tool run inline on the game thread cannot observe the ticks it is
 preventing, so `mc.server.ticks.wait` returned zero after burning its whole timeout, and a long enough
@@ -187,7 +187,7 @@ One resolution chain for every setting, highest priority first:
 
 1. system property — `-DminecraftMcp.<path>`
 2. environment variable — `MINECRAFT_MCP_<PATH>`
-3. config file — `config/minecraft-mcp.toml` (NeoForge) or `config/minecraft-mcp.json` (Fabric)
+3. config file — `config/minecraft-mcp.toml` (NeoForge, Forge) or `config/minecraft-mcp.json` (Fabric, Quilt)
 4. built-in default
 
 All three spellings are derived mechanically from one path, so they stay in lockstep:
