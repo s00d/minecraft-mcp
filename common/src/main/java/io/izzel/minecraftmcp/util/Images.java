@@ -40,16 +40,42 @@ public final class Images {
     }
 
     /** Loaded only when scaling is attempted, so a missing java.desktop fails here and not in Images. */
+    /**
+     * Box-filter downscaling on the pixel arrays. Graphics2D is deliberately avoided: drawing starts the AWT
+     * toolkit, which on macOS takes over the main thread's event loop from GLFW and freezes the game.
+     */
     private static final class Scaler {
+        static {
+            // Without this, the first AWT class loads the windowing toolkit; the game never needs it.
+            if (System.getProperty("java.awt.headless") == null) System.setProperty("java.awt.headless", "true");
+        }
+
         static byte[] scale(byte[] png, int maxWidth) throws IOException {
             var image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(png));
             if (image == null || image.getWidth() <= maxWidth) return png;
-            int height = Math.max(1, image.getHeight() * maxWidth / image.getWidth());
-            var scaled = new java.awt.image.BufferedImage(maxWidth, height, java.awt.image.BufferedImage.TYPE_INT_RGB);
-            var graphics = scaled.createGraphics();
-            graphics.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            graphics.drawImage(image, 0, 0, maxWidth, height, null);
-            graphics.dispose();
+            int width = image.getWidth(), height = image.getHeight();
+            int outHeight = Math.max(1, height * maxWidth / width);
+            int[] source = image.getRGB(0, 0, width, height, null, 0, width);
+            int[] target = new int[maxWidth * outHeight];
+            for (int y = 0; y < outHeight; y++) {
+                int y0 = y * height / outHeight, y1 = Math.max(y0 + 1, (y + 1) * height / outHeight);
+                for (int x = 0; x < maxWidth; x++) {
+                    int x0 = x * width / maxWidth, x1 = Math.max(x0 + 1, (x + 1) * width / maxWidth);
+                    long r = 0, g = 0, b = 0;
+                    for (int sy = y0; sy < y1; sy++) {
+                        for (int sx = x0; sx < x1; sx++) {
+                            int argb = source[sy * width + sx];
+                            r += (argb >> 16) & 0xff;
+                            g += (argb >> 8) & 0xff;
+                            b += argb & 0xff;
+                        }
+                    }
+                    long n = (long) (y1 - y0) * (x1 - x0);
+                    target[y * maxWidth + x] = (int) ((r / n) << 16 | (g / n) << 8 | (b / n));
+                }
+            }
+            var scaled = new java.awt.image.BufferedImage(maxWidth, outHeight, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            scaled.setRGB(0, 0, maxWidth, outHeight, target, 0, maxWidth);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             javax.imageio.ImageIO.write(scaled, "png", out);
             return out.toByteArray();
