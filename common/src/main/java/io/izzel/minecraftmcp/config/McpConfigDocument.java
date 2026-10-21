@@ -34,9 +34,10 @@ public final class McpConfigDocument {
               ],
               "endpoint": {
                 "_comment": [
-                  "REQUIRES A RESTART. bind/port/authToken: the local HTTP endpoint. port 0 picks",
-                  "  a free one, a blank authToken mints a fresh token each start. The server has",
-                  "  already bound and published its token by the time you could edit this.",
+                  "REQUIRES A RESTART. bind/port/authToken: the local MCP endpoint. port 0 uses",
+                  "  25580 on a client and 25581 on a server, or a free one when that is taken; a",
+                  "  blank authToken is minted once and kept in mcp/token. The server has already",
+                  "  bound and published its token by the time you could edit this.",
                   "headless: advertised in mc.debug.capabilities so an agent knows this is a",
                   "  virtual display. Informational only."
                 ],

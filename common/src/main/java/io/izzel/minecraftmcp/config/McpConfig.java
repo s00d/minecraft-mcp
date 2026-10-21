@@ -48,6 +48,11 @@ public final class McpConfig {
         return configured.isBlank() ? mintedAuthToken : configured;
     }
 
+    /** False when authToken() is the token minted for this run rather than one set in a config layer. */
+    public boolean authTokenConfigured() {
+        return !resolve(String.class, "endpoint", "authToken").isBlank();
+    }
+
     public boolean headless() {
         return resolve(Boolean.class, "endpoint", "headless");
     }

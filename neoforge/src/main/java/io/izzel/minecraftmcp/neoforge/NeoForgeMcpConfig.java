@@ -57,13 +57,14 @@ final class NeoForgeMcpConfig {
             .translation("minecraft_mcp.configuration.endpoint.bind")
             .gameRestart()
             .define("bind", "127.0.0.1"));
-        define(BUILDER.comment("Port for the local HTTP endpoint; 0 picks a free one.",
+        define(BUILDER.comment("Port for the local MCP endpoint; 0 uses 25580 on a client and 25581 on a server,",
+                "or a free one when that is taken.",
                 "Requires a game restart: the server has already bound.")
             .translation("minecraft_mcp.configuration.endpoint.port")
             .gameRestart()
             .defineInRange("port", 0, 0, 65535));
         define(BUILDER.comment("Bearer token for the local HTTP endpoint.",
-                "Blank mints a fresh random token on every start.",
+                "Blank mints a random token once and keeps it in mcp/token.",
                 "Requires a game restart: the token is already published in mcp/server.json.")
             .translation("minecraft_mcp.configuration.endpoint.authToken")
             .gameRestart()
