@@ -29,7 +29,7 @@ Environment/configuration:
 
 - `MINECRAFT_MCP_ENDPOINT_HEADLESS=true`
 - `MINECRAFT_MCP_ENDPOINT_BIND=127.0.0.1`
-- `MINECRAFT_MCP_ENDPOINT_PORT=0` (the default: 25580 client, 25581 server, next free one when taken)
+- `MINECRAFT_MCP_ENDPOINT_PORT=0` (the default: 25580 client, 25581 server; give each parallel game its own port)
 - `MINECRAFT_MCP_SCENARIO_DIRECTORY=/absolute/path/to/examples/scenarios`
 - `MINECRAFT_MCP_SCENARIO_BATCH_EXIT=true`
 

@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.izzel.minecraftmcp.config.McpConfig;
 import io.izzel.minecraftmcp.json.Json;
+import io.izzel.minecraftmcp.util.Log;
 
 import java.io.*;
 import java.net.BindException;
@@ -22,10 +23,10 @@ import java.util.concurrent.Executor;
  * The MCP Streamable HTTP endpoint at {@code /mcp}: every JSON-RPC message is one POST, answered with
  * {@code application/json} (or 202 for a notification). There is no event stream, so GET and DELETE are 405.
  *
- * <p>So a client config keeps working across restarts, port 0 (the default) means "the side's usual port":
- * 25580 for a client, 25581 for a server. Further games started at the same time take the next free one of
- * the same parity (25582, 25584, ... for clients; 25583, ... for servers), and only past ten of them a random
- * port. Each running instance is listed in {@code ~/.minecraft-mcp/instances/<port>.json} until it stops.
+ * <p>The port is fixed so a client config keeps working across restarts: {@code endpoint.port}, where 0 (the
+ * default) means 25580 for a client and 25581 for a server. When that port is taken (another game is already
+ * running), the endpoint stays off with a warning naming the setting, and the game runs on; it never moves to
+ * another port behind the config's back.
  *
  * <p>Authentication: bound to loopback without a configured token, the endpoint takes any local caller, as
  * local MCP servers usually do; browsers are kept out by the Origin check. A configured token is always
@@ -43,7 +44,6 @@ public final class LocalHttpMcpServer implements AutoCloseable {
     private final Executor workers;
     private HttpServer server;
     private String token;
-    private Path instanceFile;
 
     public LocalHttpMcpServer(McpConfig config, JsonRpcHandler handler, Executor workers) {
         this.config = config;
@@ -53,14 +53,22 @@ public final class LocalHttpMcpServer implements AutoCloseable {
 
     public void start(Path gameDir, Map<String, Object> descriptor) throws IOException {
         boolean serverSide = "server".equals(descriptor.get("side"));
-        server = config.port() != 0 ? bind(config.port()) : bindFirstFree(serverSide ? SERVER_PORT : CLIENT_PORT);
+        int port = config.port() != 0 ? config.port() : serverSide ? SERVER_PORT : CLIENT_PORT;
+        Files.deleteIfExists(gameDir.resolve("mcp/server.json")); // never leave one that names another game's port
+        Files.deleteIfExists(gameDir.resolve("mcp/mcp.json"));
+        try {
+            server = HttpServer.create(new InetSocketAddress(config.bindHost(), port), 0);
+        } catch (BindException e) {
+            Log.warn("port " + port + " on " + config.bindHost() + " is taken (another game running?), so this game has NO MCP "
+                + "endpoint. Set endpoint.port in " + config.source() + " or MINECRAFT_MCP_ENDPOINT_PORT to a free port and restart.");
+            return;
+        }
         server.createContext("/mcp", this::handle);
         server.setExecutor(workers);
         token = config.authTokenConfigured() ? config.authToken()
             : loopback(config.bindHost()) ? null : persistedToken(gameDir.resolve("mcp/token"));
         server.start();
 
-        int port = server.getAddress().getPort();
         String url = "http://" + (config.bindHost().contains(":") ? "[" + config.bindHost() + "]" : config.bindHost()) + ":" + port + "/mcp";
         Map<String, Object> discovery = new LinkedHashMap<>();
         discovery.put("protocol", "mcp");
@@ -77,33 +85,9 @@ public final class LocalHttpMcpServer implements AutoCloseable {
         entry.put("type", "http");
         entry.put("url", url);
         if (token != null) entry.put("headers", Map.of("Authorization", "Bearer " + token));
-        String name = (serverSide ? "minecraft-server" : "minecraft") + (port == (serverSide ? SERVER_PORT : CLIENT_PORT) ? "" : "-" + port);
-        write(gameDir.resolve("mcp/mcp.json"), Json.stringify(Map.of("mcpServers", Map.of(name, entry))));
-
-        discovery.put("gameDir", gameDir.toAbsolutePath().toString());
-        discovery.put("pid", ProcessHandle.current().pid());
-        try {
-            instanceFile = Path.of(System.getProperty("user.home"), ".minecraft-mcp", "instances", port + ".json");
-            write(instanceFile, Json.stringify(discovery));
-            instanceFile.toFile().deleteOnExit(); // the game may exit without closing the endpoint
-        } catch (IOException | RuntimeException e) {
-            instanceFile = null; // the shared listing is a convenience; the endpoint works without it
-        }
-    }
-
-    private HttpServer bind(int port) throws IOException {
-        return HttpServer.create(new InetSocketAddress(config.bindHost(), port), 0);
-    }
-
-    private HttpServer bindFirstFree(int base) throws IOException {
-        for (int port = base; port < base + 20; port += 2) {
-            try {
-                return bind(port);
-            } catch (BindException e) {
-                // another game already has it
-            }
-        }
-        return bind(0);
+        write(gameDir.resolve("mcp/mcp.json"),
+            Json.stringify(Map.of("mcpServers", Map.of(serverSide ? "minecraft-server" : "minecraft", entry))));
+        Log.info("MCP endpoint at " + url);
     }
 
     /** The token in {@code file}, or a freshly minted one written there (owner-only where the OS allows). */
@@ -186,13 +170,6 @@ public final class LocalHttpMcpServer implements AutoCloseable {
     public void close() {
         if (server != null) {
             server.stop(0);
-        }
-        if (instanceFile != null) {
-            try {
-                Files.deleteIfExists(instanceFile);
-            } catch (IOException ignored) {
-                // a stale listing names a port nobody answers on; the next game on that port overwrites it
-            }
         }
     }
 }

@@ -28,9 +28,9 @@ holding the tool's JSON; `mc.client.screenshot.take` with `inline: true` adds an
 
 ## HTTP
 
-- **Ports.** `endpoint.port` `0` (the default) means 25580 for a client and 25581 for a server. When
-  that is taken (another game is running) the next free one of the same parity is used, up to ten
-  games per side (25582, 25584, ... / 25583, 25585, ...), then a random port.
+- **Ports.** `endpoint.port` `0` (the default) means 25580 for a client and 25581 for a server.  Nothing else:
+  when that port is taken (another game is running), the game runs on without an endpoint and logs a
+  warning naming `endpoint.port`; it never moves to another port.
 - **Origin.** A request with a non-local `Origin` header is `403`, so a web page cannot reach the
   endpoint through DNS rebinding. Requests without `Origin` (every non-browser client) pass.
 - **Token.** Bound to loopback without `endpoint.authToken`, no token is required. A configured token
@@ -45,11 +45,9 @@ Each start writes, under the game directory:
 - `mcp/server.json`: `protocol`, `transport` (`streamable-http`), `url`, `host`, `port`, `path`,
   `authToken` (only when a token is in force), `side`, `loader`, `minecraftVersion`, `capabilities`.
 - `mcp/mcp.json`: a ready `mcpServers` entry (`type: "http"`, `url`, and the `Authorization` header
-  when there is a token). It is named `minecraft` on a client and `minecraft-server` on a server, or
-  `minecraft-<port>` when this game did not get its side's default port.
+  when there is a token). It is named `minecraft` on a client and `minecraft-server` on a server.
 
-And `~/.minecraft-mcp/instances/<port>.json` lists every running game: the `server.json` fields plus
-`gameDir` and `pid`. It is removed when the game exits.
+Both are deleted at start before binding, so after a failed bind none is left naming another game's port.
 
 ## Tool namespaces
 
@@ -199,7 +197,7 @@ All three spellings are derived mechanically from one path, so they stay in lock
 | Path | Default | Notes |
 |---|---|---|
 | `endpoint.bind` | `127.0.0.1` | Restart to change |
-| `endpoint.port` | `0` (25580 client, 25581 server, next free one when taken) | Restart to change |
+| `endpoint.port` | `0` (25580 client, 25581 server) | Restart to change |
 | `endpoint.authToken` | blank (no token on loopback; minted into `mcp/token` otherwise) | Restart to change; never printed |
 | `endpoint.headless` | `false` | Restart to change; `true` hides the game window at start (see [headless](headless.md)) |
 | `scenario.directory` | blank (run nothing) | Restart to change |

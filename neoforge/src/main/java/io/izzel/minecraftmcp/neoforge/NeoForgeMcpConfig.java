@@ -59,7 +59,8 @@ final class NeoForgeMcpConfig {
             .gameRestart()
             .define("bind", "127.0.0.1"));
         define(BUILDER.comment("Port for the local MCP endpoint; 0 uses 25580 on a client and 25581 on a server,",
-                "or a free one when that is taken.",
+                "A taken port leaves the game without an endpoint and logs a warning:",
+                "give each game that runs at the same time its own port.",
                 "Requires a game restart: the server has already bound.")
             .translation("minecraft_mcp.configuration.endpoint.port")
             .gameRestart()

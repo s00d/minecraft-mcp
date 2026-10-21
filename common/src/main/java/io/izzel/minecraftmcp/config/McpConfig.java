@@ -31,6 +31,11 @@ public final class McpConfig {
             new Layer("default", new DefaultOptions()));
     }
 
+    /** Where the config file is, for messages that tell the user what to edit. */
+    public String source() {
+        return configSource;
+    }
+
     public String bindHost() {
         return resolve(String.class, "endpoint", "bind");
     }

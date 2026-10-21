@@ -35,7 +35,8 @@ public final class McpConfigDocument {
               "endpoint": {
                 "_comment": [
                   "REQUIRES A RESTART. bind/port/authToken: the local MCP endpoint. port 0 uses",
-                  "  25580 on a client and 25581 on a server, or a free one when that is taken.",
+                  "  25580 on a client and 25581 on a server. A taken port leaves the game without",
+                  "  an endpoint and logs a warning: give each parallel game its own port.",
                   "  A blank authToken on a loopback bind means no token: any local program may",
                   "  connect, browsers are refused by the Origin check. Set one to require it; a",
                   "  non-loopback bind with a blank one mints a token once into mcp/token.",

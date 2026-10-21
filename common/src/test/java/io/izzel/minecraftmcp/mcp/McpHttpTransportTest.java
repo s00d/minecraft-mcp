@@ -50,12 +50,9 @@ class McpHttpTransportTest {
             MapOptions options = MapOptions.of().with(port, "endpoint", "port");
             if (configuredToken != null) options.with(configuredToken, "endpoint", "authToken");
             server = new LocalHttpMcpServer(new McpConfig(options, "config/test.json"), new JsonRpcHandler(registry), workers);
-            try {
-                server.start(gameDir, Map.of("side", "client"));
-                break;
-            } catch (java.net.BindException e) {
-                if (attempt == 4) throw e;
-            }
+            server.start(gameDir, Map.of("side", "client"));
+            if (server.port() > 0) break;
+            assertTrue(attempt < 4, "no free port after 5 tries");
         }
         Map<?, ?> discovery = (Map<?, ?>) Json.parse(Files.readString(gameDir.resolve("mcp/server.json")));
         url = (String) discovery.get("url");
@@ -155,18 +152,23 @@ class McpHttpTransportTest {
         var anonymous = post("{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"ping\"}", Map.of());
         assertEquals(200, anonymous.statusCode());
         Map<?, ?> entry = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) Json.parse(Files.readString(gameDir.resolve("mcp/mcp.json"))))
-            .get("mcpServers")).get("minecraft-" + server.port());
+            .get("mcpServers")).get("minecraft");
         assertEquals(Map.of("type", "http", "url", url), entry);
     }
 
     @Test
-    void eachRunningInstanceIsListedUntilItStops() throws Exception {
-        Path listing = Path.of(System.getProperty("user.home"), ".minecraft-mcp", "instances", server.port() + ".json");
-        Map<?, ?> instance = (Map<?, ?>) Json.parse(Files.readString(listing));
-        assertEquals(url, instance.get("url"));
-        assertEquals(gameDir.toAbsolutePath().toString(), instance.get("gameDir"));
-        server.close();
-        assertFalse(Files.exists(listing));
+    void aTakenPortLeavesTheGameRunningWithoutAnEndpointOrAStaleDiscoveryFile() throws Exception {
+        try (ServerSocket taken = new ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))) {
+            LocalHttpMcpServer second = new LocalHttpMcpServer(
+                new McpConfig(MapOptions.of().with(taken.getLocalPort(), "endpoint", "port"), "config/test.json"),
+                new JsonRpcHandler(new ToolRegistry()), workers);
+            Files.writeString(gameDir.resolve("mcp/server.json"), "{\"port\": 1}");
+            second.start(gameDir, Map.of("side", "client"));
+            assertEquals(-1, second.port());
+            assertFalse(Files.exists(gameDir.resolve("mcp/server.json")), "a discovery file must not name someone else's port");
+            assertFalse(Files.exists(gameDir.resolve("mcp/mcp.json")));
+            second.close();
+        }
     }
 
     @Test
@@ -178,7 +180,7 @@ class McpHttpTransportTest {
         assertEquals(401, anonymous.statusCode());
         assertEquals(200, post("{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"ping\"}", Map.of()).statusCode());
         Map<?, ?> entry = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) Json.parse(Files.readString(gameDir.resolve("mcp/mcp.json"))))
-            .get("mcpServers")).get("minecraft-" + server.port());
+            .get("mcpServers")).get("minecraft");
         assertEquals(Map.of("Authorization", "Bearer hunter2"), entry.get("headers"));
     }
 

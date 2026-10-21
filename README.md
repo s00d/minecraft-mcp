@@ -38,7 +38,7 @@ Fabric also needs [Fabric API](https://modrinth.com/mod/fabric-api) for the same
 `mods/`. NeoForge needs nothing else.
 
 **3. Start Minecraft** with that loader's profile. The log shows
-`[Minecraft MCP] ... MCP server started on port 25580`.
+`[Minecraft MCP] MCP endpoint at http://127.0.0.1:25580/mcp`.
 
 **4. Connect your agent** (the game must be running):
 
@@ -100,11 +100,11 @@ curl -s http://127.0.0.1:25580/mcp -H 'Content-Type: application/json' \
 
 ### Several games at once
 
-Each game takes the next free port of its side: clients 25580, 25582, 25584, ..., servers 25581, 25583, ....
-`<game dir>/mcp/server.json` and `mcp/mcp.json` always name the port this game got (its `mcp.json` entry is
-called `minecraft-25582` and so on), and every running game is listed in
-`~/.minecraft-mcp/instances/<port>.json` with its game directory, loader, version and pid. Add one MCP
-server per game, or fix a port per game with `endpoint.port`.
+The port comes from `endpoint.port` only: 25580 for a client and 25581 for a server by default. If it is
+taken (another game is already running), the game starts anyway with no MCP endpoint and logs
+`[Minecraft MCP] port 25580 ... is taken ... Set endpoint.port ...`. To run several games at once, give
+each its own port in its `config/minecraft-mcp.toml` / `.json` (or `MINECRAFT_MCP_ENDPOINT_PORT`) and add
+one MCP server per game. The port never changes between restarts, so the client config keeps working.
 
 ### Authentication
 
@@ -195,7 +195,7 @@ startup log reports which layer won for each setting.
 | Setting | System property / environment variable | Default | |
 |---|---|---|---|
 | `endpoint.bind` | `minecraftMcp.endpoint.bind` / `MINECRAFT_MCP_ENDPOINT_BIND` | `127.0.0.1` | restart |
-| `endpoint.port` | `minecraftMcp.endpoint.port` / `MINECRAFT_MCP_ENDPOINT_PORT` | `0`: 25580 client, 25581 server, next free one when taken | restart |
+| `endpoint.port` | `minecraftMcp.endpoint.port` / `MINECRAFT_MCP_ENDPOINT_PORT` | `0`: 25580 client, 25581 server | restart |
 | `endpoint.authToken` | `minecraftMcp.endpoint.authToken` / `MINECRAFT_MCP_ENDPOINT_AUTH_TOKEN` | none on loopback | restart |
 | `endpoint.headless` | `minecraftMcp.endpoint.headless` / `MINECRAFT_MCP_ENDPOINT_HEADLESS` | `false`; `true` hides the game window | restart |
 | `scenario.directory` | `minecraftMcp.scenario.directory` / `MINECRAFT_MCP_SCENARIO_DIRECTORY` | none | run once at startup |

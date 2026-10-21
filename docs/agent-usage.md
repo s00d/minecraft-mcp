@@ -85,9 +85,9 @@ For a repeatable sequence with assertions, write a [scenario](scenarios.md) inst
 
 ## Several games
 
-Each game takes the next free port of its side: clients 25580, 25582, 25584, ..., servers 25581,
-25583, .... Every running game is listed in `~/.minecraft-mcp/instances/<port>.json` with its game
-directory, side, loader, version and pid, and its own `mcp/mcp.json` names the entry
-`minecraft-<port>` when it did not get the default port. Add one MCP server per game, or pin a port
-per game with `endpoint.port`. `mcp/server.json` says which side and version an endpoint is, so an
+The port comes from `endpoint.port` only: 25580 for a client and 25581 for a server by default. If it is
+taken (another game is already running), the game starts anyway with no MCP endpoint and logs
+`[Minecraft MCP] port 25580 ... is taken ... Set endpoint.port ...`. To run several games at once, give
+each its own port in its `config/minecraft-mcp.toml` / `.json` (or `MINECRAFT_MCP_ENDPOINT_PORT`) and add
+one MCP server per game. The port never changes between restarts, so the client config keeps working. `mcp/server.json` says which side and version an endpoint is, so an
 agent can tell them apart without probing.

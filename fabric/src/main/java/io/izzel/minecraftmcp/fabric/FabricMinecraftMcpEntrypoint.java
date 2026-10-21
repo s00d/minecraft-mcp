@@ -1,6 +1,5 @@
 package io.izzel.minecraftmcp.fabric;
 
-import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.MinecraftMcpBootstrap;
 import io.izzel.minecraftmcp.client.VanillaClientBridge;
 import io.izzel.minecraftmcp.config.ChannelCaller;
@@ -29,7 +28,6 @@ public final class FabricMinecraftMcpEntrypoint implements ClientModInitializer 
             clientEndpoint = MinecraftMcpBootstrap.start(new FabricBridge());
             clientPluginHandler = new McpPluginMessageHandler(clientEndpoint.registry(),
                     McpConfigs::current, clientEndpoint.workers());
-            Log.info("Fabric MCP server started on port " + clientEndpoint.port());
         } catch (Exception e) { throw new RuntimeException("Failed to start Minecraft MCP", e); }
     }
     private static void registerRemoteMcpPluginMessages() {

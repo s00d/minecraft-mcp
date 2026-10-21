@@ -1,6 +1,5 @@
 package io.izzel.minecraftmcp.neoforge;
 
-import io.izzel.minecraftmcp.util.Log;
 import io.izzel.minecraftmcp.MinecraftMcpBootstrap;
 import io.izzel.minecraftmcp.client.VanillaClientBridge;
 import io.izzel.minecraftmcp.config.ChannelCaller;
@@ -72,7 +71,6 @@ public final class NeoForgeMinecraftMcpClientMod {
                             response -> context.reply(new NeoForgeStringPayload(NeoForgeStringPayload.CLIENT_RESPONSE, response))),
                     (context, text) -> clientPluginHandler.receiveResponse(text,
                             NeoForgeClientTrust.currentServerCaller(context)));
-            Log.info("NeoForge MCP server started on port " + clientEndpoint.port());
         } catch (Exception e) { throw new RuntimeException("Failed to start Minecraft MCP", e); }
     }
 
