@@ -116,10 +116,27 @@ public final class ClientCompat {
         *///?}
     }
 
-    /** RGBA bytes of a screenshot image, top row first (1.21.8 exposed the native pointer; 1.21.2 renamed the raw ints). */
-    public static byte[] rgba(NativeImage image) {
+    /**
+     * The game's gain for a sound of {@code volume} on {@code source}. Until 1.21.8 the master volume is the listener
+     * gain and the category multiplies before the clamp; from 1.21.11 both are clamped and multiplied (the per-category
+     * fades the engine applies on top are left out).
+     */
+    public static float soundGain(Minecraft mc, float volume, net.minecraft.sounds.SoundSource source) {
+        //? if >=1.21.11 {
+        return Math.max(0, Math.min(1, volume)) * Math.max(0, Math.min(1, mc.options.getFinalSoundSourceVolume(source)));
+        //?} else {
+        /*float category = source == net.minecraft.sounds.SoundSource.MASTER ? 1 : mc.options.getSoundSourceVolume(source);
+        return Math.max(0, Math.min(1, volume * category)) * mc.options.getSoundSourceVolume(net.minecraft.sounds.SoundSource.MASTER);
+        *///?}
+    }
+
+    /**
+     * RGBA bytes of a screenshot image, top row first, into {@code reuse} when it has the right size (1.21.8 exposed
+     * the native pointer; 1.21.2 renamed the raw ints).
+     */
+    public static byte[] rgba(NativeImage image, byte[] reuse) {
         int size = image.getWidth() * image.getHeight() * 4;
-        byte[] bytes = new byte[size];
+        byte[] bytes = reuse != null && reuse.length == size ? reuse : new byte[size];
         //? if >=1.21.8 {
         org.lwjgl.system.MemoryUtil.memByteBuffer(image.getPointer(), size).get(bytes);
         //?} else if >=1.21.2 {

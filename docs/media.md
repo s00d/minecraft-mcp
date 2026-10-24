@@ -20,14 +20,21 @@ sounds the track holds) and `bytes`. `mc.client.video.state` reports a recording
   wall clock: when the game lags, the previous frame is repeated, so the video and its sound stay in step.
   A hidden window (`mc.client.window`) still renders and records.
 - **ffmpeg** is looked up on the `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin` and `/usr/bin`. A
-  launcher often starts the game with a short `PATH`: pass `ffmpeg: "/path/to/ffmpeg"` or set
-  `MINECRAFT_MCP_FFMPEG`.
+  launcher often starts the game with a short `PATH`: pass `ffmpeg: "/path/to/ffmpeg"` (it must be named
+  `ffmpeg`) or set `MINECRAFT_MCP_FFMPEG`.
+- **Encoder.** H.264 with the fastest encoder the ffmpeg has: libx264 on the `veryfast` preset (its default
+  preset falls behind a running game and frames get dropped), else VideoToolbox, NVENC or OpenH264; `state`
+  reports which (`codec`). Frame buffers are reused, and at most about 256 MB of frames wait for the encoder.
 - **Sound.** The game's audio output cannot be tapped from inside the process (OpenAL plays it straight to
   the device). The track is rebuilt instead: every sound the game starts is recorded with its time, position,
   volume and pitch, and when the recording stops the same `.ogg` files are decoded and mixed the way the
-  game's OpenAL setup plays them: linear distance attenuation, pitch, the channel volumes, mono sounds
-  panned by where they are relative to the player, stereo ones (music, records) as they are, loops until
-  they stop. Not in it: sounds from other mods' own audio engines (voice chat mods, for example).
+  game's OpenAL setup plays them: linear distance attenuation, pitch, the channel volumes (with the formula of
+  the game version: it changed in 1.21.11), mono sounds panned by where they are relative to the player,
+  stereo ones (music, records) as they are, loops until they stop. Sounds that change while they play
+  (minecarts, elytra wind, bees) are followed every tick: volume, pitch and position. While the game is
+  paused, every sound but music and UI holds still, as in the game. This is the same approach as live game
+  audio recorders such as PeterWolf's Replay Audio Recorder; OpenAL's loopback device, which replay mods
+  use when exporting, would take the audio away from the speakers. Not in it: sounds from other mods' own audio engines (voice chat mods, for example).
   `audio: false` records video only.
 
 ## Sounds the game played

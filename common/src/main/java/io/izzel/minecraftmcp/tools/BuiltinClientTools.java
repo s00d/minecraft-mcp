@@ -98,7 +98,9 @@ public final class BuiltinClientTools {
                 int cols = Math.max(1, Math.min(16, columns.get(args)));
                 int rowCount = Math.max(1, Math.min(16, rows.get(args)));
                 int width = Math.max(16, cellWidth.get(args));
-                if (cols * width > 8192) throw new IllegalArgumentException("sheet wider than 8192 pixels; lower cellWidth or columns");
+                int gapPx = Math.max(0, Math.min(64, gap.get(args)));
+                int height = Math.max(0, Math.min(4096, cellHeight.get(args)));
+                if (cols * width + (cols - 1) * gapPx > 8192) throw new IllegalArgumentException("sheet wider than 8192 pixels; lower cellWidth or columns");
                 java.nio.file.Path dir = bridge.gameDirectory().resolve("screenshots");
                 List<java.nio.file.Path> files = new ArrayList<>();
                 if (sheetNames.get(args) != null && !sheetNames.get(args).isEmpty()) {
@@ -120,7 +122,7 @@ public final class BuiltinClientTools {
                     }
                 }
                 if (files.isEmpty()) throw new IllegalArgumentException("no screenshots in " + dir + "; take some with mc.client.screenshot.take");
-                Images.Sheet sheet = Images.grid(files, cols, rowCount, width, Math.max(0, cellHeight.get(args)), Math.max(0, gap.get(args)));
+                Images.Sheet sheet = Images.grid(files, cols, rowCount, width, height, gapPx);
                 java.nio.file.Files.createDirectories(dir);
                 java.nio.file.Path out = dir.resolve("grid-" + java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
                     .format(java.time.LocalDateTime.now()) + ".png");
@@ -223,7 +225,7 @@ public final class BuiltinClientTools {
             String button = mouseButton.get(args);
             Map<String, Object> result = bridge.submit(() -> bridge.mouseClick(button, atX.get(args), atY.get(args))).get(10, TimeUnit.SECONDS);
             // the game handles a world click on its next tick; return once it did
-            if ("world".equals(result.get("where"))) bridge.waitTicks(1);
+            if ("world".equals(result.get("where")) && !bridge.isOnGameThread()) bridge.waitTicks(1);
             return result;
         }));
         registry.register(tool("mc.client.mouse.hold", "Hold a mouse button for some ticks, then release it. In the world left keeps "
@@ -298,6 +300,20 @@ public final class BuiltinClientTools {
         registry.register(destructive(tool("mc.client.player.drop", "Drop the selected item stack or a single item", List.of(dropAll, ACTION_TIMEOUT),
             args -> bridge.dropSelected(dropAll.get(args)))));
         registry.register(tool("mc.client.player.jump", "Make the player jump once", List.of(ACTION_TIMEOUT), args -> bridge.jump()));
+        Param<Integer> gotoX = Param.integer("x", "target block X").required();
+        Param<Integer> gotoY = Param.integer("y", "target block Y (the block the feet end up in); omit for any height");
+        Param<Integer> gotoZ = Param.integer("z", "target block Z").required();
+        Param<Double> gotoTolerance = Param.number("tolerance", "blocks from the target that count as arrived").or(1.0);
+        Param<Boolean> gotoSprint = Param.bool("sprint", "sprint on straight stretches").or(true);
+        Param<Integer> gotoNodes = Param.integer("maxNodes", "search limit per plan; a goal beyond it is approached in steps").or(30_000);
+        Param<Boolean> gotoDry = Param.bool("dryRun", "only search: report whether there is a path and return it, without walking").or(false);
+        Param<Long> gotoTimeout = Param.longInt("timeoutMs", "give up walking after this long").or(60_000L);
+        registry.register(tool("mc.client.movement.goto", "Walk to a block like a player: searches a path (walk, diagonal, jump up one "
+            + "block, drop up to three, swim; avoids lava, fire, cactus, magma ...) and follows it with the movement keys, planning "
+            + "again when stuck. Status reached, no_path (with the closest distance) or stuck; dryRun only checks for a path",
+            List.of(gotoX, gotoY, gotoZ, gotoTolerance, gotoSprint, gotoNodes, gotoDry, gotoTimeout),
+            args -> bridge.gotoBlock(gotoX.get(args), gotoY.get(args), gotoZ.get(args), gotoTolerance.get(args), gotoSprint.get(args),
+                gotoNodes.get(args), gotoDry.get(args))));
         registry.register(read(tool("mc.client.vehicle.state", "Get player vehicle state", args -> bridge.submit(bridge::vehicleState).get(10, TimeUnit.SECONDS))));
         Param<List<?>> waypoints = Param.array("waypoints", "points to walk through: [{x,y,z}, ...] or [[x,y,z], ...]").required();
         Param<Boolean> loop = Param.bool("loop", "repeat the route").or(false);
@@ -414,6 +430,7 @@ public final class BuiltinClientTools {
             })));
         registry.register(read(tool("mc.client.chat.wait", "Wait for a chat or system message matching contains/regex, received after since",
             List.of(SINCE, CONTAINS, REGEX, TIMEOUT), args -> {
+                bridge.requireOffGameThread("waiting for a chat message");
                 var log = bridge.chatLog();
                 ChatLog.Entry entry = log.await(SINCE.get(args), chatFilter(args), TIMEOUT.get(args));
                 return entry == null ? Map.of("matched", false, "last", log.lastSequence())
@@ -441,6 +458,16 @@ public final class BuiltinClientTools {
         registry.register(tool("mc.client.inventory.equip", "Put an item from anywhere in the inventory into the hand: selects it when it is "
             + "on the hotbar, otherwise swaps it into the selected hotbar slot (or the offhand)", List.of(ITEM, equipHand),
             args -> bridge.submit(() -> bridge.equipItem(ITEM.get(args), equipHand.get(args))).get(10, TimeUnit.SECONDS)));
+        Param<String> recipeItem = Param.string("item", "only recipes whose result id contains this, e.g. planks");
+        Param<Boolean> recipeCraftable = Param.bool("craftable", "only recipes the inventory has everything for").or(false);
+        Param<Integer> recipeLimit = Param.integer("limit", "max recipes").or(50);
+        registry.register(read(tool("mc.client.recipes.list", "Crafting recipes the client knows (the unlocked ones in the recipe book), "
+            + "with the grid they need (2x2 or 3x3), their ingredients and how often the inventory can craft them now",
+            List.of(recipeItem, recipeCraftable, recipeLimit), args -> bridge.recipes(recipeItem.get(args), recipeCraftable.get(args), recipeLimit.get(args)))));
+        Param<Integer> craftCount = Param.integer("count", "how many items to make (rounded up to whole crafts)").or(1);
+        registry.register(tool("mc.client.craft", "Craft an item through the recipe book: 2x2 recipes in the inventory, 3x3 ones at a "
+            + "crafting table within reach. Reports how many were crafted, or what is missing, or that a table is needed",
+            List.of(ITEM, craftCount), args -> bridge.craft(ITEM.get(args), Math.max(1, craftCount.get(args)))));
         registry.register(read(tool("mc.client.container.state", "Get current player container/menu state", args -> bridge.submit(bridge::containerState).get(10, TimeUnit.SECONDS))));
         Param<String> clickTypeParam = Param.oneOf("clickType", "slot click kind; SWAP swaps the slot with hotbar slot <button> (0-8, 40 = offhand), "
             + "PICKUP_ALL collects matching items onto the cursor, CLONE is creative middle-click", "PICKUP", "QUICK_MOVE", "THROW", "SWAP", "PICKUP_ALL", "CLONE").or("PICKUP");

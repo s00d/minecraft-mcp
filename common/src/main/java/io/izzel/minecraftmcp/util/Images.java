@@ -51,8 +51,8 @@ public final class Images {
         return ((png[16] & 0xff) << 24) | ((png[17] & 0xff) << 16) | ((png[18] & 0xff) << 8) | (png[19] & 0xff);
     }
 
-    /** Loaded only when scaling is attempted, so a missing java.desktop fails here and not in Images. */
     /**
+     * Loaded only when scaling is attempted, so a missing java.desktop fails here and not in Images.
      * Box-filter downscaling on the pixel arrays. Graphics2D is deliberately avoided: drawing starts the AWT
      * toolkit, which on macOS takes over the main thread's event loop from GLFW and freezes the game.
      */
@@ -83,7 +83,9 @@ public final class Images {
                 if (image == null) throw new IOException("not an image: " + files.get(i));
                 int w = image.getWidth(), h = image.getHeight();
                 if (sheet == null) {
-                    if (cellH <= 0) cellH = Math.max(1, cellWidth * h / w);
+                    // a very tall first picture must not make a sheet too big to allocate
+                    if (cellH <= 0) cellH = Math.max(1, Math.min(4096, cellWidth * h / w));
+                    if ((long) rows * cellH + (long) (rows - 1) * gap > 8192) throw new IOException("sheet taller than 8192 pixels; lower rows or cellHeight");
                     sheetH = rows * cellH + (rows - 1) * gap;
                     sheet = new int[sheetW * sheetH];
                     java.util.Arrays.fill(sheet, BACKGROUND);

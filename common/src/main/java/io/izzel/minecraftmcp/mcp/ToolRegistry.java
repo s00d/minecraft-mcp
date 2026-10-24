@@ -57,10 +57,11 @@ public final class ToolRegistry {
         McpTool tool = find(name).orElseThrow(() -> new UnknownToolException(name));
         Object result = tool.call(safeArgs);
         if (result instanceof FutureResult<?> futureResult) {
-            long timeoutMs = timeoutMs(safeArgs);
+            long timeoutMs = timeoutMs(tool, safeArgs);
             try {
                 return futureResult.await(timeoutMs);
-            } catch (TimeoutException e) {
+            } catch (TimeoutException | InterruptedException e) {
+                // a stopped script interrupts the wait; the game action must stop with it (released keys, overrides)
                 futureResult.cancel();
                 throw e;
             }
@@ -79,8 +80,14 @@ public final class ToolRegistry {
         return config != null && (config.toolDisabled(tool.name()) || config.readOnly() && tool.kind() != McpTool.Kind.READ);
     }
 
-    private static long timeoutMs(Map<String, Object> args) {
-        return Math.max(0L, McpTools.longArg(args, "timeoutMs", 10000L));
+    /** The caller's timeoutMs, else the default the tool declares for it, else 10 seconds. */
+    private static long timeoutMs(McpTool tool, Map<String, Object> args) {
+        long fallback = 10000L;
+        if (tool.inputSchema().get("properties") instanceof Map<?, ?> properties
+            && properties.get("timeoutMs") instanceof Map<?, ?> timeout && timeout.get("default") instanceof Number declared) {
+            fallback = declared.longValue();
+        }
+        return Math.max(0L, McpTools.longArg(args, "timeoutMs", fallback));
     }
 
     public static final class UnknownToolException extends IllegalArgumentException {

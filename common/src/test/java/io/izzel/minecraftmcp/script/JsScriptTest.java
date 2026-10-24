@@ -200,6 +200,24 @@ class JsScriptTest {
     }
 
     @Test
+    void regexLiteralsAndMethodsNamedConstAreLeftAlone() {
+        assertEquals("let r = /'`[/]\\//g.test(s); let a = 1; x = a / 2; let b = o.const(); ({const() { return 1 }})",
+            JsScript.constToLet("const r = /'`[/]\\//g.test(s); const a = 1; x = a / 2; const b = o.const(); ({const() { return 1 }})"));
+    }
+
+    @Test
+    void scriptsCannotReachJava() throws Exception {
+        Map<String, Object> report = run("""
+            let leaked = [];
+            try { null.x } catch (e) { leaked.push(typeof e.rhinoException, typeof e.javaException); }
+            leaked.push(typeof Packages, typeof java, typeof JavaAdapter);
+            try { leaked.push(String(mc.client.state.getClass)); } catch (e) { leaked.push("threw"); }
+            return leaked;""");
+        assertEquals(true, report.get("ok"), String.valueOf(report));
+        assertEquals(List.of("undefined", "undefined", "undefined", "undefined", "undefined", "undefined"), report.get("result"));
+    }
+
+    @Test
     void constInsideLoopsGetsANewValueEachIteration() throws Exception {
         Map<String, Object> report = run("const out = []; for (const x of [1, 2]) { const y = x * 10; out.push(y); } let i = 0; "
             + "while (i < 2) { const z = i++; out.push(z); } return out;");

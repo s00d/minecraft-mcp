@@ -70,6 +70,9 @@ public class RecordingClientBridge extends FakeClientBridge {
     @Override public Map<String, Object> videoStart(String name, int fps, int maxWidth, long maxSeconds, boolean audio, String ffmpeg) { return record("videoStart", name, fps); }
     @Override public Map<String, Object> videoStop(long timeoutMs) { return record("videoStop"); }
     @Override public Map<String, Object> videoState() { return record("videoState"); }
+    @Override public FutureResult<Map<String, Object>> gotoBlock(int x, Integer y, int z, double tolerance, boolean sprint, int maxNodes, boolean dryRun) { return action("gotoBlock", x, y, z); }
+    @Override public Map<String, Object> recipes(String item, boolean craftableOnly, int limit) { return record("recipes", item, craftableOnly); }
+    @Override public Map<String, Object> craft(String item, int count) { return record("craft", item, count); }
     @Override public Map<String, Object> playerState() { return record("playerState"); }
     @Override public Map<String, Object> attackEntity(int id) { return record("attackEntity", id); }
     @Override public Map<String, Object> interactEntity(int id, String hand) { return record("interactEntity", id, hand); }

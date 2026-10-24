@@ -7,7 +7,6 @@ import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.ConsString;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
-import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.NativeArray;
@@ -38,6 +37,7 @@ public final class JsScript {
     public static final int MAX_DEPTH = 8;
     /** How long one sync() block may hold the game thread. */
     static final long SYNC_LIMIT_MS = 250;
+    private static final long MAX_TIMEOUT_MS = 86_400_000L;
     private static final int LOG_LIMIT = 200;
 
     private final ToolRegistry registry;
@@ -58,7 +58,7 @@ public final class JsScript {
         this.registry = registry;
         this.bridge = bridge;
         this.directory = directory;
-        this.deadline = System.currentTimeMillis() + Math.max(1, timeoutMs);
+        this.deadline = System.currentTimeMillis() + Math.max(1, Math.min(timeoutMs, MAX_TIMEOUT_MS));
         this.maxCalls = Math.max(1, maxCalls);
     }
 
@@ -198,6 +198,9 @@ public final class JsScript {
                     i += 2;
                     modes.push('*');
                     continue;
+                } else if (ch == '/' && regexAllowed(out)) {
+                    i = copyRegex(code, i, out);
+                    continue;
                 } else if (ch == '\'' || ch == '"' || ch == '`') modes.push(ch);
                 else if (ch == '{') braces.push(braces.pop() + 1);
                 else if (ch == '}') {
@@ -222,10 +225,49 @@ public final class JsScript {
         return out.toString();
     }
 
-    /** `const` followed by a colon is an object key, not the keyword. */
+    /** `const` followed by a colon or a parenthesis is a key or a method name, not the keyword. */
     private static boolean objectKey(String code, int after) {
         while (after < code.length() && Character.isWhitespace(code.charAt(after))) after++;
-        return after < code.length() && code.charAt(after) == ':';
+        return after < code.length() && (code.charAt(after) == ':' || code.charAt(after) == '(');
+    }
+
+    private static final java.util.Set<String> BEFORE_REGEX = java.util.Set.of("return", "typeof", "case", "in", "of", "delete",
+        "void", "throw", "new", "else", "do", "yield", "await");
+
+    /** A slash starts a regex literal where a value is expected: at the start, after an operator, or after these keywords. */
+    private static boolean regexAllowed(StringBuilder before) {
+        int end = before.length() - 1;
+        while (end >= 0 && Character.isWhitespace(before.charAt(end))) end--;
+        if (end < 0) return true;
+        char last = before.charAt(end);
+        if ("(,=:[!&|?{};+-*%<>~^".indexOf(last) >= 0) return true;
+        int start = end;
+        while (start >= 0 && Character.isJavaIdentifierPart(before.charAt(start))) start--;
+        return start < end && BEFORE_REGEX.contains(before.substring(start + 1, end + 1));
+    }
+
+    /** Copies a regex literal starting at {@code from} (the opening slash), flags included; returns where it ends. */
+    private static int copyRegex(String code, int from, StringBuilder out) {
+        int i = from + 1;
+        boolean inClass = false;
+        while (i < code.length()) {
+            char ch = code.charAt(i);
+            if (ch == '\\' && i + 1 < code.length()) {
+                i += 2;
+                continue;
+            }
+            if (ch == '\n') break;
+            if (ch == '[') inClass = true;
+            else if (ch == ']') inClass = false;
+            else if (ch == '/' && !inClass) {
+                i++;
+                break;
+            }
+            i++;
+        }
+        while (i < code.length() && Character.isLetter(code.charAt(i))) i++;
+        out.append(code, from, i);
+        return i;
     }
 
     private static boolean identifier(char ch) {
@@ -235,13 +277,9 @@ public final class JsScript {
     private String message(RhinoException e) {
         if (e instanceof JavaScriptException js) {
             Object value = js.getValue();
-            if (value instanceof Scriptable error && ScriptableObject.getProperty(error, "message") instanceof Object m && !(m instanceof Undefined)
-                && ScriptableObject.getProperty(error, "message") != Scriptable.NOT_FOUND) {
-                return Context.toString(m);
-            }
-            return Context.toString(value);
+            Object message = value instanceof Scriptable error ? ScriptableObject.getProperty(error, "message") : Scriptable.NOT_FOUND;
+            return Context.toString(message == Scriptable.NOT_FOUND || message instanceof Undefined ? value : message);
         }
-        if (e instanceof EvaluatorException) return e.details();
         return e.details();
     }
 
@@ -265,8 +303,9 @@ public final class JsScript {
         });
         put(scope, "sleep", (c, s, a) -> {
             check();
+            if (bridge.isOnGameThread()) throw new IllegalStateException("sleep() would freeze the game inside sync(); call it outside");
             try {
-                Thread.sleep(Math.max(0, (long) number(a, 0, 0)));
+                Thread.sleep(Math.max(0, Math.min((long) number(a, 0, 0), deadline - System.currentTimeMillis())));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("stopped");
@@ -362,6 +401,8 @@ public final class JsScript {
 
     /** Inside sync() the tool runs right here on the game thread; one that has to wait for ticks cannot. */
     private Object inSync(String name, Map<String, Object> args) throws Exception {
+        // server, remote and process tools wait on other threads; inside sync() they would hold the frame up
+        if (!name.startsWith("mc.client.")) throw new IllegalStateException(name + " cannot run inside sync(); call it outside");
         Object result = registry.callNow(name, args);
         if (result instanceof io.izzel.minecraftmcp.mcp.FutureResult<?> future) {
             if (!future.toCompletableFuture().isDone()) {
@@ -383,6 +424,15 @@ public final class JsScript {
 
     /** Checks stop and the deadline every few thousand instructions, so `while (true) {}` cannot hang the run. */
     private final class Factory extends ContextFactory {
+        @Override
+        protected Context makeContext() {
+            Context cx = super.makeContext();
+            // no Java class is reachable from a script: without this, a caught TypeError's e.rhinoException is a
+            // wrapped Java object, and getClass().forName(...) leads to Runtime.exec
+            cx.setClassShutter(name -> false);
+            return cx;
+        }
+
         @Override
         protected void observeInstructionCount(Context cx, int instructionCount) {
             check();

@@ -61,8 +61,9 @@ const snapshot = sync(() => ({
 }));
 ```
 
-Inside `sync` nothing can wait for ticks: `wait`, `until`, `mouse.hold`, `destroy.block`, `ticks.wait` and the
-condition waits fail with an error saying so. The game stands still while the block runs, so a block that
+Inside `sync` nothing can wait: `wait`, `until`, `sleep`, `mouse.hold`, `destroy.block`, `ticks.wait`,
+`chat.wait` and the condition waits fail with an error saying so, and only `mc.client.*` tools run there
+(server and remote tools wait on other threads). The game stands still while the block runs, so a block that
 takes longer than 250 ms is stopped.
 
 ## Running in the background
@@ -81,7 +82,10 @@ script with `run(name, args)`. `mc.script.get` and `mc.script.delete` read and r
 
 - `timeoutMs` (default 300000) stops the script, even inside `while (true) {}`; `maxCalls` (default 100000)
   limits tool calls.
-- Scripts are sandboxed: no Java classes, files or network, only the globals above.
+- Scripts are sandboxed: no Java class is reachable (a class shutter refuses every one, so neither `Packages`
+  nor a Java object behind an error leads out), no files, no network; only the globals above.
+- Stopping a script, or a tool call running out of time, cancels the game action it was waiting for (a held
+  button is released, a block break stops).
 
 ## The engine
 

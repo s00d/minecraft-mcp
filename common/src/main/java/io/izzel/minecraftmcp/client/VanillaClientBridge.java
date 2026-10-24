@@ -47,13 +47,22 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
 
     private final SoundLog soundLog;
     private final VideoRecorder video;
+    private final Crafter crafter;
 
     protected VanillaClientBridge(Minecraft mc) {
         this.mc = java.util.Objects.requireNonNull(mc, "Minecraft client must be available when the MCP endpoint starts");
         this.soundLog = new SoundLog(mc);
         this.video = new VideoRecorder(mc, soundLog);
+        this.crafter = new Crafter(this, mc);
         mc.execute(() -> mc.getSoundManager().addListener(soundLog));
     }
+
+
+    public FutureResult<Map<String, Object>> gotoBlock(int x, Integer y, int z, double tolerance, boolean sprint, int maxNodes, boolean dryRun) {
+        return Navigator.go(mc, x, y, z, tolerance, sprint, maxNodes, dryRun);
+    }
+    public Map<String, Object> recipes(String item, boolean craftableOnly, int limit) { return crafter.list(item, craftableOnly, limit); }
+    public Map<String, Object> craft(String item, int count) { return crafter.craft(item, count); }
 
     public Map<String, Object> options(Map<String, Object> set, boolean save) {
         if (set == null || set.isEmpty()) return ClientOptions.read(mc);
@@ -500,6 +509,7 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
         int index = buttonIndex(button);
         KeyMapping mapping = buttonMapping(button);
         long[] held = {-1};
+        boolean[] overriding = {false};
         Screen[] pressedOn = {null};
         double[] at = {0, 0};
         TickCounter.CLIENT.eachTick(() -> {
@@ -518,8 +528,11 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
                         return true;
                     } else {
                         mapping.setDown(true);
+                        if (index == 0) {
+                            AttackOverride.acquire();
+                            overriding[0] = true;
+                        }
                         click(mapping);
-                        if (index == 0) AttackOverride.acquire();
                     }
                     return false;
                 }
@@ -540,17 +553,17 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
                     report.put("y", at[1]);
                 } else {
                     mapping.setDown(false);
-                    if (index == 0) AttackOverride.release();
+                    if (overriding[0]) AttackOverride.release();
+                    overriding[0] = false;
                     report.put("where", "world");
                     report.put("target", ClientQueries.target(mc));
                 }
                 result.complete(report);
                 return true;
             } catch (RuntimeException e) {
-                if (pressedOn[0] == null && held[0] >= 0) {
-                    mapping.setDown(false);
-                    if (index == 0) AttackOverride.release();
-                }
+                if (pressedOn[0] == null && held[0] >= 0) mapping.setDown(false);
+                if (overriding[0]) AttackOverride.release();
+                overriding[0] = false;
                 result.completeExceptionally(e);
                 return true;
             }

@@ -204,6 +204,20 @@ public interface MinecraftClientBridge extends MinecraftBridge {
         throw new UnsupportedOperationException("Video recording is not implemented by " + loader());
     }
 
+    /** Walks to a block along a path it searches for; {@code y} null means any height. */
+    default FutureResult<Map<String, Object>> gotoBlock(int x, Integer y, int z, double tolerance, boolean sprint, int maxNodes, boolean dryRun) {
+        throw new UnsupportedOperationException("Path finding is not implemented by " + loader());
+    }
+
+    default Map<String, Object> recipes(String item, boolean craftableOnly, int limit) {
+        throw new UnsupportedOperationException("Recipes are not implemented by " + loader());
+    }
+
+    /** Crafts {@code count} of {@code item} through the recipe book; blocks until done (MCP worker thread). */
+    default Map<String, Object> craft(String item, int count) {
+        throw new UnsupportedOperationException("Crafting is not implemented by " + loader());
+    }
+
     /** Health, food, experience, effects, game mode and the like of the client player. */
     default Map<String, Object> playerState() {
         throw new UnsupportedOperationException("Player state is not implemented by " + loader());

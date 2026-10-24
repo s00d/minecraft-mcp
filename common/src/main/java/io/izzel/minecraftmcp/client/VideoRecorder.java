@@ -5,7 +5,7 @@ import io.izzel.minecraftmcp.concurrent.TickCounter;
 import io.izzel.minecraftmcp.util.AudioMix;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SoundInstance;
-import net.minecraft.sounds.SoundSource;
+import net.minecraft.client.resources.sounds.TickableSoundInstance;
 
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -50,7 +50,7 @@ final class VideoRecorder {
             ? "mcp-" + DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(LocalDateTime.now())
             : Path.of(name).getFileName().toString().replaceFirst("\\.mp4$", "");
         if (file.contains("..") || file.isBlank()) throw new IllegalArgumentException("invalid video name");
-        session = new Session(executable, directory.resolve(file + ".mp4"), Math.max(1, Math.min(20, fps)), Math.max(16, maxWidth),
+        session = new Session(executable, codec(executable), directory.resolve(file + ".mp4"), Math.max(1, Math.min(20, fps)), Math.max(16, maxWidth),
             Math.max(1, maxSeconds), audio);
         session.begin();
         return session.state();
@@ -71,10 +71,39 @@ final class VideoRecorder {
         return session == null ? Map.of("recording", false) : session.state();
     }
 
+    private static final Map<String, List<String>> CODECS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * H.264 with the fastest encoder this ffmpeg has: libx264 on the veryfast preset keeps up with a game running at
+     * the same time (its default, medium, falls behind and frames get dropped), else the platform's hardware encoder.
+     */
+    private static List<String> codec(String ffmpeg) {
+        return CODECS.computeIfAbsent(ffmpeg, path -> {
+            String encoders = "";
+            try {
+                Process probe = new ProcessBuilder(path, "-hide_banner", "-encoders").redirectErrorStream(true).start();
+                encoders = new String(probe.getInputStream().readAllBytes());
+                probe.waitFor(10, TimeUnit.SECONDS);
+            } catch (IOException | InterruptedException ignored) {
+                // fall through to the encoder every build has
+            }
+            if (encoders.contains("libx264")) return List.of("-c:v", "libx264", "-preset", "veryfast", "-crf", "23");
+            if (encoders.contains("h264_videotoolbox")) return List.of("-c:v", "h264_videotoolbox", "-b:v", "8M");
+            if (encoders.contains("h264_nvenc")) return List.of("-c:v", "h264_nvenc", "-preset", "p3");
+            if (encoders.contains("libopenh264")) return List.of("-c:v", "libopenh264", "-b:v", "8M");
+            return List.of("-c:v", "mpeg4", "-q:v", "3");
+        });
+    }
+
     /** An explicit path, MINECRAFT_MCP_FFMPEG, the PATH, then the usual install places (a launcher's PATH is short). */
     private static String ffmpeg(String given) {
         List<String> candidates = new ArrayList<>();
-        if (given != null && !given.isBlank()) candidates.add(given);
+        if (given != null && !given.isBlank()) {
+            // the path comes from an MCP caller: it must be an ffmpeg, not any program on the machine
+            String name = Path.of(given).getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+            if (!name.equals("ffmpeg") && !name.equals("ffmpeg.exe")) throw new IllegalArgumentException("ffmpeg must point to an executable named ffmpeg");
+            candidates.add(given);
+        }
         String env = System.getenv("MINECRAFT_MCP_FFMPEG");
         if (env != null && !env.isBlank()) candidates.add(env);
         String path = System.getenv("PATH");
@@ -92,32 +121,38 @@ final class VideoRecorder {
 
     private record Frame(long nanos, int width, int height, byte[] rgba) {}
 
-    /** A played sound, its timing in seconds from the start of the recording. */
+    /** A played sound: its file, timing in seconds from the start of the recording, and its state over time. */
     private static final class Played {
         final SoundInstance instance;
         final String file;
         final double start;
         double end = Double.NaN;
-        final boolean looping, spatial;
-        final double gain, pitch, maxDistance, x, y, z;
+        final boolean looping, positioned, attenuated, pausable;
+        final List<AudioMix.Key> keys = new ArrayList<>();
 
-        Played(SoundInstance instance, String file, double start, double gain, double maxDistance) {
+        Played(SoundInstance instance, String file, double start, boolean pausable) {
             this.instance = instance;
             this.file = file;
             this.start = start;
             this.looping = instance.isLooping();
-            this.spatial = !instance.isRelative() && instance.getAttenuation() == SoundInstance.Attenuation.LINEAR;
-            this.gain = gain;
-            this.pitch = instance.getPitch();
-            this.maxDistance = maxDistance;
-            this.x = instance.getX();
-            this.y = instance.getY();
-            this.z = instance.getZ();
+            this.positioned = !instance.isRelative();
+            this.attenuated = this.positioned && instance.getAttenuation() == SoundInstance.Attenuation.LINEAR;
+            this.pausable = pausable;
+        }
+
+        /** A keyframe when the gain, pitch or position changed since the last one. */
+        void key(double time, double gain, double pitch, double maxDistance, double x, double y, double z) {
+            if (!keys.isEmpty()) {
+                AudioMix.Key last = keys.get(keys.size() - 1);
+                if (last.gain() == gain && last.pitch() == pitch && last.x() == x && last.y() == y && last.z() == z) return;
+            }
+            keys.add(new AudioMix.Key(time, gain, pitch, maxDistance, x, y, z));
         }
     }
 
     private final class Session {
         final String ffmpeg;
+        final List<String> codec;
         final Path output;
         final Path video;
         final Path log;
@@ -126,22 +161,29 @@ final class VideoRecorder {
         final long maxNanos;
         final boolean audio;
         final long frameNanos;
-        final BlockingQueue<Frame> queue = new ArrayBlockingQueue<>(8);
+        BlockingQueue<Frame> queue;
+        /** Frame buffers handed back by the encoder, so a recording does not allocate one per frame. */
+        final BlockingQueue<byte[]> spare = new ArrayBlockingQueue<>(4);
         final CompletableFuture<Map<String, Object>> finished = new CompletableFuture<>();
+        final java.util.function.BiConsumer<SoundInstance, Map<String, Object>> tap = this::onSound;
         // client thread only
         final List<Played> played = new ArrayList<>();
         final Map<SoundInstance, Played> playing = new IdentityHashMap<>();
         final List<AudioMix.Listener> listener = new ArrayList<>();
+        final List<double[]> pauses = new ArrayList<>();
+        boolean paused;
         long startNanos;
         long nextCapture;
         volatile boolean capturing;
         // read from other threads
         volatile boolean stopping;
         volatile long stopNanos;
+        volatile String error;
         volatile int captured, dropped, written, width, height;
 
-        Session(String ffmpeg, Path output, int fps, int maxWidth, long maxSeconds, boolean audio) {
+        Session(String ffmpeg, List<String> codec, Path output, int fps, int maxWidth, long maxSeconds, boolean audio) {
             this.ffmpeg = ffmpeg;
+            this.codec = codec;
             this.output = output;
             this.video = output.resolveSibling(output.getFileName() + ".video.mp4");
             this.log = output.resolveSibling(output.getFileName() + ".ffmpeg.log");
@@ -154,7 +196,7 @@ final class VideoRecorder {
 
         void begin() {
             startNanos = System.nanoTime();
-            if (audio) sounds.tap = this::onSound;
+            if (audio) sounds.tap = tap;
             TickCounter.CLIENT.eachTick(this::tick);
             Thread encoder = new Thread(this::encode, "minecraft-mcp-video");
             encoder.setDaemon(true);
@@ -172,60 +214,106 @@ final class VideoRecorder {
             }
         }
 
-        /** Client thread, once per tick: ask for a frame when one is due, follow the listener and looping sounds. */
+        void fail(Throwable t) {
+            if (error == null) error = String.valueOf(t);
+            requestStop();
+        }
+
+        /** Client thread, once per tick: ask for a frame when one is due, follow the listener and the sounds still playing. */
         boolean tick() {
-            long now = System.nanoTime();
-            if (!stopping && now - startNanos >= maxNanos) requestStop();
-            if (stopping) {
-                if (sounds.tap != null && audio) sounds.tap = null;
-                for (Played p : playing.values()) p.end = seconds(stopNanos);
-                playing.clear();
+            try {
+                long now = System.nanoTime();
+                if (!stopping && now - startNanos >= maxNanos) requestStop();
+                if (stopping) {
+                    finishSounds();
+                    return true;
+                }
+                if (audio) followSounds(now);
+                if (!capturing && now >= nextCapture) capture(now);
+                return false;
+            } catch (Throwable t) {
+                // a dead tick task would leave the recording running with nothing enforcing its limit
+                fail(t);
+                finishSounds();
                 return true;
             }
-            if (audio) {
-                var transform = mc.getSoundManager().getListenerTransform();
-                var position = transform.position();
-                var right = transform.right();
-                listener.add(new AudioMix.Listener(seconds(now), position.x(), position.y(), position.z(), right.x(), right.y(), right.z()));
-                playing.entrySet().removeIf(entry -> {
-                    if (mc.getSoundManager().isActive(entry.getKey())) return false;
-                    entry.getValue().end = seconds(now);
+        }
+
+        private void finishSounds() {
+            if (sounds.tap == tap) sounds.tap = null;
+            double end = seconds(stopNanos);
+            for (Played p : playing.values()) p.end = end;
+            playing.clear();
+            if (paused) pauses.add(new double[] {pauses.isEmpty() ? 0 : pauses.remove(pauses.size() - 1)[0], end});
+            paused = false;
+        }
+
+        private void followSounds(long now) {
+            double time = seconds(now);
+            // the game pauses every sound but music and UI while it is paused (Esc, or focus lost in singleplayer)
+            boolean pausedNow = mc.isPaused();
+            if (pausedNow && !paused) pauses.add(new double[] {time, Double.MAX_VALUE});
+            if (!pausedNow && paused) pauses.get(pauses.size() - 1)[1] = time;
+            paused = pausedNow;
+            var transform = mc.getSoundManager().getListenerTransform();
+            var position = transform.position();
+            var right = transform.right();
+            listener.add(new AudioMix.Listener(time, position.x(), position.y(), position.z(), right.x(), right.y(), right.z()));
+            playing.entrySet().removeIf(entry -> {
+                if (!mc.getSoundManager().isActive(entry.getKey())) {
+                    entry.getValue().end = time;
                     return true;
-                });
-            }
-            if (!capturing && now >= nextCapture) {
-                capturing = true;
-                nextCapture = Math.max(nextCapture + frameNanos, now);
-                long requested = now;
-                try {
-                    ClientCompat.takeScreenshot(mc, image -> {
-                        try (image) {
-                            Frame frame = new Frame(requested, image.getWidth(), image.getHeight(), ClientCompat.rgba(image));
-                            captured++;
-                            if (!queue.offer(frame)) dropped++;
-                        } finally {
-                            capturing = false;
-                        }
-                    });
-                } catch (RuntimeException e) {
-                    capturing = false;
-                    throw e;
                 }
+                // ticking sounds change volume, pitch and position every tick (minecarts, elytra, bees)
+                if (entry.getKey() instanceof TickableSoundInstance) key(entry.getValue(), time);
+                return false;
+            });
+        }
+
+        private void key(Played p, double time) {
+            SoundInstance instance = p.instance;
+            var sound = instance.getSound();
+            float volume = instance.getVolume();
+            p.key(time, ClientCompat.soundGain(mc, volume, instance.getSource()), instance.getPitch(),
+                Math.max(volume, 1.0) * sound.getAttenuationDistance(), instance.getX(), instance.getY(), instance.getZ());
+        }
+
+        private void capture(long now) {
+            capturing = true;
+            nextCapture = Math.max(nextCapture + frameNanos, now);
+            try {
+                ClientCompat.takeScreenshot(mc, image -> {
+                    try (image) {
+                        byte[] rgba = ClientCompat.rgba(image, spare.poll());
+                        Frame frame = new Frame(now, image.getWidth(), image.getHeight(), rgba);
+                        captured++;
+                        if (queue == null) {
+                            // about 256 MB of frames may wait for the encoder, at least two
+                            queue = new ArrayBlockingQueue<>((int) Math.max(2, Math.min(16, (256L << 20) / Math.max(1, rgba.length))));
+                        }
+                        if (!queue.offer(frame)) dropped++;
+                    } catch (Throwable t) {
+                        fail(t);
+                    } finally {
+                        capturing = false;
+                    }
+                });
+            } catch (Throwable t) {
+                capturing = false;
+                throw t;
             }
-            return false;
         }
 
         /** Client thread: a sound started playing. */
         void onSound(SoundInstance instance, Map<String, Object> entry) {
             var sound = instance.getSound();
             if (sound == null || stopping) return;
-            SoundSource source = instance.getSource();
-            float category = source == SoundSource.MASTER ? 1 : mc.options.getSoundSourceVolume(source);
-            double gain = Math.max(0, Math.min(1, instance.getVolume() * category)) * mc.options.getSoundSourceVolume(SoundSource.MASTER);
-            double maxDistance = Math.max(instance.getVolume(), 1.0) * sound.getAttenuationDistance();
-            Played p = new Played(instance, String.valueOf(sound.getPath()), seconds(System.nanoTime()), gain, maxDistance);
+            String source = instance.getSource().getName();
+            Played p = new Played(instance, String.valueOf(sound.getPath()), seconds(System.nanoTime()),
+                !source.equals("music") && !source.equals("ui"));
+            key(p, p.start);
             played.add(p);
-            if (p.looping || sound.shouldStream()) playing.put(instance, p);
+            if (p.looping || sound.shouldStream() || instance instanceof TickableSoundInstance) playing.put(instance, p);
         }
 
         /** Encoder thread: frames to ffmpeg on a wall-clock timeline, then the sound track, then the final file. */
@@ -235,9 +323,11 @@ final class VideoRecorder {
                 OutputStream out = null;
                 byte[] last = null;
                 while (true) {
-                    Frame frame = queue.poll(100, TimeUnit.MILLISECONDS);
+                    BlockingQueue<Frame> frames = queue;
+                    Frame frame = frames == null ? null : frames.poll(100, TimeUnit.MILLISECONDS);
+                    if (frames == null) Thread.sleep(20);
                     if (frame == null) {
-                        if (stopping && !capturingAfterStop()) break;
+                        if (stopping && !capturingAfterStop() && (frames == null || frames.isEmpty())) break;
                         continue;
                     }
                     if (out == null) {
@@ -250,16 +340,22 @@ final class VideoRecorder {
                         : resize(frame.rgba(), frame.width(), frame.height(), width, height);
                     // the frame belongs at its capture time; a gap (lag, a slow readback) repeats the previous one
                     long index = Math.round((frame.nanos() - startNanos) / (double) frameNanos);
-                    while (last != null && written < index) {
-                        out.write(last);
-                        written++;
+                    try {
+                        while (last != null && written < index) {
+                            out.write(last);
+                            written++;
+                        }
+                        if (written <= index) {
+                            out.write(rgba);
+                            written++;
+                        }
+                    } catch (IOException e) {
+                        throw new IOException("ffmpeg stopped taking frames: " + tail(log), e);
                     }
-                    if (written <= index) {
-                        out.write(rgba);
-                        written++;
-                    }
+                    if (last != null && last != rgba) spare.offer(last);
                     last = rgba;
                 }
+                if (error != null) throw new IllegalStateException(error);
                 double duration = seconds(stopNanos);
                 if (out == null) throw new IllegalStateException("no frame was captured; is the game rendering?");
                 long total = Math.max(1, Math.round(duration * fps));
@@ -285,6 +381,8 @@ final class VideoRecorder {
                 finished.complete(result);
             } catch (Throwable e) {
                 if (process != null) process.destroyForcibly();
+                // stop first, so a new recording started after the failure is not touched by this one
+                requestStop();
                 finished.completeExceptionally(e);
             } finally {
                 requestStop();
@@ -298,26 +396,35 @@ final class VideoRecorder {
 
         private Process startFfmpeg() throws IOException {
             int outWidth = Math.min(maxWidth, width) / 2 * 2;
-            List<String> command = List.of(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+            List<String> command = new ArrayList<>(List.of(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
                 "-f", "rawvideo", "-pix_fmt", "rgba", "-s", width + "x" + height, "-r", String.valueOf(fps), "-i", "-",
-                "-vf", "scale=" + outWidth + ":-2", "-pix_fmt", "yuv420p", "-movflags", "+faststart", video.toString());
+                "-vf", "scale=" + outWidth + ":-2", "-pix_fmt", "yuv420p"));
+            command.addAll(codec);
+            // without a sound track this file is the final one: put the index first so it plays while downloading
+            if (!audio) command.addAll(List.of("-movflags", "+faststart"));
+            command.add(video.toString());
             return new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         }
 
         /** Builds the sound track and puts it next to the video in the final file; how many sounds it holds. */
         private int muxAudio(double duration) throws Exception {
-            List<Played> snapshot = mc.submit(() -> new ArrayList<>(played)).get(10, TimeUnit.SECONDS);
+            // the lists belong to the client thread: copy them there
+            List<Object> lists = mc.submit(() -> List.<Object>of(new ArrayList<>(played), new ArrayList<>(listener), new ArrayList<>(pauses)))
+                .get(10, TimeUnit.SECONDS);
+            @SuppressWarnings("unchecked") List<Played> snapshot = (List<Played>) lists.get(0);
+            @SuppressWarnings("unchecked") List<AudioMix.Listener> listenerSnapshot = (List<AudioMix.Listener>) lists.get(1);
+            @SuppressWarnings("unchecked") List<double[]> pauseSnapshot = (List<double[]>) lists.get(2);
             Map<String, AudioMix.Pcm> decoded = new HashMap<>();
             List<AudioMix.Voice> voices = new ArrayList<>();
             for (Played p : snapshot) {
                 AudioMix.Pcm pcm = decoded.computeIfAbsent(p.file, file -> decode(p));
                 if (pcm == null) continue;
-                voices.add(new AudioMix.Voice(pcm, p.start, p.end, p.looping, p.gain, p.pitch, p.spatial, p.maxDistance, p.x, p.y, p.z));
+                voices.add(new AudioMix.Voice(pcm, p.start, p.end, p.looping, p.positioned, p.attenuated, p.pausable, List.copyOf(p.keys)));
             }
             Path wav = output.resolveSibling(output.getFileName() + ".wav");
             try {
                 try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(wav), 1 << 20)) {
-                    AudioMix.write(voices, listener, duration, out);
+                    AudioMix.write(voices, listenerSnapshot, pauseSnapshot, duration, out);
                 }
                 Process mux = new ProcessBuilder(ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", video.toString(), "-i", wav.toString(),
                     "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", output.toString())
@@ -358,6 +465,8 @@ final class VideoRecorder {
             state.put("dropped", dropped);
             if (width > 0) state.put("source", width + "x" + height);
             state.put("audio", audio);
+            state.put("codec", codec.get(1));
+            if (error != null) state.put("error", error);
             return state;
         }
     }

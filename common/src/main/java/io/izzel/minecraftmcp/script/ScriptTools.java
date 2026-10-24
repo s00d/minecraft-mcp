@@ -25,12 +25,12 @@ public final class ScriptTools {
     private ScriptTools() {
     }
 
-    private record Run(String id, String name, JsScript script, Thread thread, long startedAt, Map<String, Object>[] report) {
+    private record Run(String id, String name, JsScript script, Thread thread, long startedAt, java.util.concurrent.atomic.AtomicReference<Map<String, Object>> report) {
         Map<String, Object> toMap() {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", id);
             if (name != null) map.put("name", name);
-            Map<String, Object> done = report[0];
+            Map<String, Object> done = report.get();
             map.put("state", done == null ? "running" : Boolean.TRUE.equals(done.get("ok")) ? "done" : "failed");
             if (done == null) {
                 map.put("calls", script.calls());
@@ -87,10 +87,18 @@ public final class ScriptTools {
             JsScript script = new JsScript(registry, bridge, directory, timeout.get(args), maxCalls.get(args));
             if (!background.get(args)) return script.run(source, scriptName, given);
             String id = "script-" + ids.incrementAndGet();
-            @SuppressWarnings("unchecked")
-            Map<String, Object>[] report = new Map[1];
+            java.util.concurrent.atomic.AtomicReference<Map<String, Object>> report = new java.util.concurrent.atomic.AtomicReference<>();
             String finalSource = source;
-            Thread thread = new Thread(() -> report[0] = script.run(finalSource, scriptName, given), "minecraft-mcp-" + id);
+            Thread thread = new Thread(() -> {
+                Map<String, Object> done;
+                try {
+                    done = script.run(finalSource, scriptName, given);
+                } catch (Throwable t) {
+                    // an Error (out of memory ...) must still end the run, or it shows as running forever
+                    done = Map.of("ok", false, "error", String.valueOf(t));
+                }
+                report.set(done);
+            }, "minecraft-mcp-" + id);
             thread.setDaemon(true);
             prune(runs);
             runs.put(id, new Run(id, scriptName, script, thread, System.currentTimeMillis(), report));
@@ -115,7 +123,7 @@ public final class ScriptTools {
                 List<String> stopped = new ArrayList<>();
                 for (Run run : runs.values()) {
                     if (stopId.get(args) != null && !run.id().equals(stopId.get(args))) continue;
-                    if (run.report()[0] != null) continue;
+                    if (run.report().get() != null) continue;
                     run.script().stop();
                     run.thread().interrupt();
                     stopped.add(run.id());
@@ -156,7 +164,7 @@ public final class ScriptTools {
 
     /** Keeps the finished runs from piling up: only the newest few stay readable. */
     private static void prune(Map<String, Run> runs) {
-        List<Run> finished = runs.values().stream().filter(run -> run.report()[0] != null)
+        List<Run> finished = runs.values().stream().filter(run -> run.report().get() != null)
             .sorted((a, b) -> Long.compare(a.startedAt(), b.startedAt())).toList();
         for (int i = 0; i < finished.size() - KEEP_FINISHED; i++) runs.remove(finished.get(i).id());
     }
