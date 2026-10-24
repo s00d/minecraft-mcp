@@ -43,7 +43,8 @@ public final class CraftPlan {
         for (Map.Entry<List<String>, Integer> entry : short_.entrySet()) {
             List<String> slot = entry.getKey();
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("item", slot.size() == 1 ? slot.get(0) : "any of " + slot);
+            item.put("item", slot.size() == 1 ? slot.get(0)
+                : "any of " + String.join(", ", slot.subList(0, Math.min(3, slot.size()))) + (slot.size() > 3 ? " (+" + (slot.size() - 3) + " more)" : ""));
             item.put("need", needed.get(slot));
             item.put("have", slot.stream().mapToInt(id -> have.getOrDefault(id, 0)).sum());
             missing.add(item);

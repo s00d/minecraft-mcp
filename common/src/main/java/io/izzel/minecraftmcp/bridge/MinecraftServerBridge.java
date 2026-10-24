@@ -97,6 +97,10 @@ public interface MinecraftServerBridge extends MinecraftBridge {
         throw new UnsupportedOperationException("Schematic export is not implemented by " + loader());
     }
 
+    default String diffSchematic(Map<String, Object> args) {
+        throw new UnsupportedOperationException("Schematic diff is not implemented by " + loader());
+    }
+
     default Map<String, Object> pasteSchematic(Map<String, Object> args) {
         throw new UnsupportedOperationException("Schematic paste is not implemented by " + loader());
     }

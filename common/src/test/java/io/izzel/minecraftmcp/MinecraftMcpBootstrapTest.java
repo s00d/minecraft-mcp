@@ -24,7 +24,23 @@ class MinecraftMcpBootstrapTest {
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> registry.call("mc.server.state", Map.of()));
 
         assertTrue(error.getMessage().startsWith("no_local_server"), error.getMessage());
-        assertTrue(error.getMessage().contains("mc.remote.call"), error.getMessage());
+        assertTrue(error.getMessage().contains("singleplayer"), error.getMessage());
+    }
+
+    @Test
+    void onAServerWithTheModTheToolRunsThere() throws Exception {
+        java.util.List<String> sent = new java.util.ArrayList<>();
+        ToolRegistry registry = new ToolRegistry();
+        MinecraftMcpBootstrap.registerIntegratedServerTools(registry, new FakeIntegratedClient() {
+            @Override public boolean remoteMcpAvailable() { return true; }
+            @Override public Object serverMcpCall(String tool, Map<String, Object> arguments, long timeoutMs) {
+                sent.add(tool + " " + arguments + " " + timeoutMs);
+                return Map.of("running", true);
+            }
+        });
+
+        assertEquals(Map.of("running", true), registry.call("mc.server.state", Map.of()));
+        assertEquals(java.util.List.of("mc.server.state {} 35000"), sent);
     }
 
     @Test
@@ -68,7 +84,7 @@ class MinecraftMcpBootstrapTest {
             .collect(Collectors.toCollection(TreeSet::new));
     }
 
-    private static final class FakeIntegratedClient extends FakeClientBridge {
+    private static class FakeIntegratedClient extends FakeClientBridge {
         MinecraftServerBridge server;
 
         @Override public boolean integratedServerAvailable() { return server != null; }

@@ -23,7 +23,8 @@ import java.util.Set;
  * search reaches (unloaded chunks, the node limit) it walks to the closest spot and searches again from there.
  */
 final class Navigator {
-    private static final long PLAN_BUDGET_NANOS = 3_000_000;
+    /** Planning time per tick; the player stands still meanwhile, so a slice may take a good part of a frame. */
+    private static final long PLAN_BUDGET_NANOS = 6_000_000;
     private static final int STUCK_TICKS = 40;
     private static final int MAX_REPLANS = 8;
     /** Steps towards a goal beyond one search (unloaded chunks, the node limit). */

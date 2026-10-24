@@ -33,7 +33,7 @@ public final class BuiltinRemoteTools {
     }
 
     private static final Param<String> TOOL = Param.string("tool", "tool name to run on the peer").required();
-    private static final Param<Map<String, Object>> ARGUMENTS = Param.object("arguments", "arguments for that tool").or(Map.of());
+    private static final Param<Map<String, Object>> ARGUMENTS = Param.object("arguments", "arguments for that tool").or(Map.of()).alias("args");
     private static final Param<Long> TIMEOUT = Param.longInt("timeoutMs", "give up waiting for the peer after this").or(30000L);
     private static final Param<String> PLAYER = Param.string("player", "name or UUID of the player whose client runs the tool").required();
 

@@ -57,7 +57,7 @@ final class SoundLog implements SoundEventListener {
         if (recorder != null) recorder.accept(sound, entry);
     }
 
-    /** Sounds after {@code since}, optionally only those whose id, subtitle or source contains {@code contains}. */
+    /** Sounds after {@code since} (negative: the newest {@code limit}), optionally only those whose id, subtitle or source contains {@code contains}. */
     Map<String, Object> read(long since, String contains, int limit) {
         String needle = contains == null ? null : contains.toLowerCase(Locale.ROOT);
         List<Map<String, Object>> page = new ArrayList<>();
@@ -65,6 +65,14 @@ final class SoundLog implements SoundEventListener {
         boolean more = false;
         synchronized (entries) {
             last = sequence;
+            if (since < 0) {
+                // no cursor: the newest ones
+                for (var it = entries.descendingIterator(); it.hasNext() && page.size() < Math.max(1, limit); ) {
+                    Map<String, Object> entry = it.next();
+                    if (needle == null || (entry.get("id") + " " + entry.get("subtitle") + " " + entry.get("source")).toLowerCase(Locale.ROOT).contains(needle)) page.add(0, entry);
+                }
+                return Map.of("sounds", page, "last", last, "more", false);
+            }
             for (Map<String, Object> entry : entries) {
                 if ((Long) entry.get("seq") <= since) continue;
                 if (needle != null && !(entry.get("id") + " " + entry.get("subtitle") + " " + entry.get("source")).toLowerCase(Locale.ROOT).contains(needle)) continue;

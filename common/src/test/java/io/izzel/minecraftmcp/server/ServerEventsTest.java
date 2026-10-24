@@ -26,6 +26,15 @@ class ServerEventsTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void withoutACursorTheNewestCome() {
+        for (int i = 0; i < 5; i++) ServerEvents.record("chat", Map.of("message", "line " + i));
+        Map<String, Object> tail = ServerEvents.read(-1, List.of("chat"), null, 2);
+        assertEquals(List.of("line 3", "line 4"), ((List<Map<String, Object>>) tail.get("events")).stream().map(e -> e.get("message")).toList());
+        assertEquals(ServerEvents.last(), tail.get("last"));
+    }
+
+    @Test
     void waitReturnsTheFirstMatchingEventOrNullAtTheTimeout() throws Exception {
         long since = ServerEvents.last();
         CompletableFuture<Map<String, Object>> waiting = CompletableFuture.supplyAsync(() -> {

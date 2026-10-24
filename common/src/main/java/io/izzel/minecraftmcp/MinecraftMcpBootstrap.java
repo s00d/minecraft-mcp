@@ -47,7 +47,7 @@ public final class MinecraftMcpBootstrap {
         BuiltinRemoteTools.registerClient(registry, bridge);
         registerIntegratedServerTools(registry, bridge);
         McpEndpoint endpoint = startEndpoint(config, registry, scenarios, bridge);
-        if (config.headless()) bridge.execute(() -> bridge.window(false));
+        if (config.headless()) bridge.execute(bridge::prepareHeadless);
         runScenarioBatch(endpoint, bridge, () -> bridge.execute(bridge::shutdownClient));
         return endpoint;
     }
@@ -71,11 +71,15 @@ public final class MinecraftMcpBootstrap {
                 continue;
             }
             registry.register(McpTools.withBody(tool, args -> {
-                if (!integrated.present()) {
-                    throw new IllegalStateException("no_local_server: this client has no MinecraftServer; open a singleplayer "
-                        + "world, or use mc.remote.call to reach the server you are connected to");
+                if (integrated.present()) return tool.call(args);
+                // connected to a server that has the mod: the same tool runs there, so scripts and tests read the
+                // same in singleplayer and on a server
+                if (bridge.remoteMcpAvailable()) {
+                    long timeoutMs = McpTools.longArg(args, "timeoutMs", 30_000L) + 5_000L;
+                    return bridge.serverMcpCall(tool.name(), args, timeoutMs);
                 }
-                return tool.call(args);
+                throw new IllegalStateException("no_local_server: this client has no MinecraftServer and the server it is "
+                    + "connected to (if any) does not run Minecraft MCP; open a singleplayer world, or connect to such a server");
             }));
         }
     }

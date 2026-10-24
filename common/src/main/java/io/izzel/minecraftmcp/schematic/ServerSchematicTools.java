@@ -41,6 +41,78 @@ public final class ServerSchematicTools {
     private static final Param<Map<String, Object>> METADATA = Param.object("metadata", "extra metadata stored in the file");
     public static final List<Param<?>> EXPORT_PARAMS = List.of(PATH, FROM, TO, ENTITIES, METADATA, MAX_BLOCKS);
     public static final List<Param<?>> PASTE_PARAMS = List.of(PATH, ORIGIN, IGNORE_AIR, BLOCK_ENTITIES, ENTITIES, BIOMES, MAX_BLOCKS);
+    private static final Param<Boolean> EXACT = Param.bool("exact", "compare block states too (stairs facing, door half ...), not only block ids").or(false);
+    private static final Param<Integer> LIMIT = Param.integer("limit", "max listed blocks").or(100);
+    public static final List<Param<?>> DIFF_PARAMS = List.of(PATH, ORIGIN, EXACT, LIMIT);
+
+    /**
+     * What differs between a schematic placed at {@code origin} and the world, as text in building order (bottom
+     * layer first): blocks still to place, to replace and to remove, and the items the missing ones take.
+     */
+    public static String diffSchematic(ServerLevel level, Path gameDirectory, Map<String, Object> args) {
+        try {
+            Path path = SchematicPathResolver.resolve(gameDirectory, PATH.get(args));
+            Schematic schematic = SpongeSchematicV3.read(path);
+            Map<?, ?> origin = ORIGIN.get(args);
+            int ox = coord(origin, "x"), oy = coord(origin, "y"), oz = coord(origin, "z");
+            boolean exact = EXACT.get(args);
+            int limit = Math.max(0, LIMIT.get(args));
+            int match = 0;
+            List<String> place = new ArrayList<>(), replace = new ArrayList<>(), remove = new ArrayList<>();
+            Map<String, Integer> needs = new LinkedHashMap<>();
+            for (int y = 0; y < schematic.height(); y++) {
+                for (int z = 0; z < schematic.length(); z++) {
+                    for (int x = 0; x < schematic.width(); x++) {
+                        String want = schematic.blockStateAt(x, y, z);
+                        BlockState state = level.getBlockState(new BlockPos(ox + x, oy + y, oz + z));
+                        String have = BlockStateParser.serialize(state);
+                        String wantId = want.contains("[") ? want.substring(0, want.indexOf('[')) : want;
+                        String haveId = have.contains("[") ? have.substring(0, have.indexOf('[')) : have;
+                        if (exact ? want.equals(have) : wantId.equals(haveId)) {
+                            match++;
+                            continue;
+                        }
+                        String at = (ox + x) + " " + (oy + y) + " " + (oz + z) + " ";
+                        if (wantId.equals("minecraft:air")) remove.add(at + shortId(have));
+                        else {
+                            (state.isAir() ? place : replace).add(at + shortId(exact ? want : wantId) + (state.isAir() ? "" : " (now " + shortId(haveId) + ")"));
+                            needs.merge(shortId(wantId), 1, Integer::sum);
+                        }
+                    }
+                }
+            }
+            StringBuilder out = new StringBuilder();
+            out.append(PATH.get(args)).append(" at ").append(ox).append(' ').append(oy).append(' ').append(oz).append(" (")
+                .append(schematic.width()).append('x').append(schematic.height()).append('x').append(schematic.length()).append("): ")
+                .append(match).append(" match, ").append(place.size()).append(" to place, ").append(replace.size()).append(" to replace, ")
+                .append(remove.size()).append(" to remove\n");
+            if (!needs.isEmpty()) {
+                List<String> items = new ArrayList<>();
+                needs.forEach((id, count) -> items.add(id + " ×" + count));
+                out.append("needs: ").append(String.join(", ", items)).append('\n');
+            }
+            int[] left = {limit};
+            section(out, "place (bottom up)", place, left);
+            section(out, "replace", replace, left);
+            section(out, "remove", remove, left);
+            return out.toString().stripTrailing();
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to compare the schematic: " + e.getMessage(), e);
+        }
+    }
+
+    private static void section(StringBuilder out, String title, List<String> lines, int[] left) {
+        if (lines.isEmpty()) return;
+        out.append(title).append(":\n");
+        int shown = Math.min(lines.size(), left[0]);
+        for (String line : lines.subList(0, shown)) out.append(line).append('\n');
+        if (shown < lines.size()) out.append("(+").append(lines.size() - shown).append(" more)\n");
+        left[0] -= shown;
+    }
+
+    private static String shortId(String id) {
+        return id.startsWith("minecraft:") ? id.substring(10) : id;
+    }
 
     private ServerSchematicTools() {}
 

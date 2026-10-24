@@ -93,6 +93,11 @@ public interface MinecraftClientBridge extends MinecraftBridge {
         throw new UnsupportedOperationException("Jump is not implemented by " + loader());
     }
 
+    /** endpoint.headless: hides the window and sets the game up to be driven without a person at it. */
+    default void prepareHeadless() {
+        window(false);
+    }
+
     default Map<String, Object> window(Boolean visible) {
         throw new UnsupportedOperationException("Window control is not implemented by " + loader());
     }
@@ -377,6 +382,18 @@ public interface MinecraftClientBridge extends MinecraftBridge {
 
     default Map<String, Object> findBlocks(String block, int radius, int limit) {
         throw new UnsupportedOperationException("Block search is not implemented by " + loader());
+    }
+
+    default Map<String, Object> placeBlock(int x, int y, int z, String item) {
+        throw new UnsupportedOperationException("Block placing is not implemented by " + loader());
+    }
+
+    default String look(double range, boolean grid, int cols, int rows) {
+        throw new UnsupportedOperationException("Look is not implemented by " + loader());
+    }
+
+    default String map(int radius, Integer y, Integer layers, boolean changes) {
+        throw new UnsupportedOperationException("Map is not implemented by " + loader());
     }
 
     /** Saves a PNG under screenshots/; a blank name means a timestamped one. */

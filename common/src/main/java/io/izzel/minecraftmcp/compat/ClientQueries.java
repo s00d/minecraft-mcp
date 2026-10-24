@@ -54,18 +54,34 @@ public final class ClientQueries {
         return Map.of("type", "entity", "entity", entity(mc, ((EntityHitResult) hit).getEntity()));
     }
 
-    /** Positions of {@code block} (an id such as minecraft:diamond_ore) within a cube around the player, nearest first. */
+    /**
+     * Positions of {@code block} within a cube around the player, nearest first: an id such as minecraft:diamond_ore,
+     * or several separated by commas, each answer then naming its block.
+     */
     public static Map<String, Object> findBlocks(Minecraft mc, String block, int radius, int limit) {
         if (mc.player == null || mc.level == null) return Map.of("inWorld", false, "blocks", List.of());
+        java.util.Set<String> wanted = new java.util.HashSet<>();
+        for (String id : block.split(",")) if (!id.isBlank()) wanted.add(id.contains(":") ? id.strip() : "minecraft:" + id.strip());
         BlockPos center = mc.player.blockPosition();
         List<BlockPos> found = new ArrayList<>();
+        Map<BlockPos, String> ids = new java.util.HashMap<>();
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -radius, -radius), center.offset(radius, radius, radius))) {
-            if (BuiltInRegistries.BLOCK.getKey(mc.level.getBlockState(pos).getBlock()).toString().equals(block)) found.add(pos.immutable());
+            String id = BuiltInRegistries.BLOCK.getKey(mc.level.getBlockState(pos).getBlock()).toString();
+            if (wanted.contains(id)) {
+                found.add(pos.immutable());
+                ids.put(found.get(found.size() - 1), id);
+            }
         }
         found.sort(Comparator.comparingDouble(pos -> pos.distSqr(center)));
         List<Map<String, Object>> blocks = new ArrayList<>();
         for (BlockPos pos : found.subList(0, Math.min(found.size(), Math.max(0, limit)))) {
-            blocks.add(Map.of("x", pos.getX(), "y", pos.getY(), "z", pos.getZ(), "distance", Math.sqrt(pos.distSqr(center))));
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("x", pos.getX());
+            entry.put("y", pos.getY());
+            entry.put("z", pos.getZ());
+            entry.put("distance", Math.sqrt(pos.distSqr(center)));
+            if (wanted.size() > 1) entry.put("block", ids.get(pos));
+            blocks.add(entry);
         }
         return Map.of("inWorld", true, "block", block, "total", found.size(), "blocks", blocks);
     }

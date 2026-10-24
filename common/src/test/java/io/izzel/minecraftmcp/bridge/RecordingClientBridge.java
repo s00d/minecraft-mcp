@@ -104,6 +104,9 @@ public class RecordingClientBridge extends FakeClientBridge {
     @Override public Map<String, Object> nearbyEntities(double radius, String type, int limit) { return record("nearbyEntities", radius, type, limit); }
     @Override public Map<String, Object> crosshairTarget() { return record("crosshairTarget"); }
     @Override public Map<String, Object> findBlocks(String block, int radius, int limit) { return record("findBlocks", block, radius, limit); }
+    @Override public Map<String, Object> placeBlock(int x, int y, int z, String item) { return record("placeBlock", x, y, z, item); }
+    @Override public String look(double range, boolean grid, int cols, int rows) { return String.valueOf(record("look", range, grid, cols, rows)); }
+    @Override public String map(int radius, Integer y, Integer layers, boolean changes) { return String.valueOf(record("map", radius, y, layers, changes)); }
     @Override public Map<String, Object> takeScreenshot(String name) { return record("takeScreenshot", name); }
     @Override public void shutdownClient() { record("shutdownClient"); }
     @Override public Map<String, Object> schematicInfo(Map<String, Object> args) { return record("schematicInfo", args.get("path")); }

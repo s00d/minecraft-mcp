@@ -59,6 +59,7 @@ public class RecordingServerBridge extends FakeServerBridge {
     }
     @Override public Map<String, Object> exportSchematic(Map<String, Object> args) { return record("exportSchematic", args.get("path")); }
     @Override public Map<String, Object> pasteSchematic(Map<String, Object> args) { return record("pasteSchematic", args.get("path")); }
+    @Override public String diffSchematic(Map<String, Object> args) { return String.valueOf(record("diffSchematic", args.get("path"))); }
     @Override public void shutdownServer() { record("shutdownServer"); }
     @Override public Map<String, Object> schematicInfo(Map<String, Object> args) { return record("schematicInfo", args.get("path")); }
 }

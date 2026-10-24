@@ -28,7 +28,7 @@ class CraftPlanTest {
     void missingNamesWhatAndHowMany() {
         assertEquals(List.of(Map.of("item", "minecraft:stick", "need", 2, "have", 1)),
             CraftPlan.missing(PICKAXE, Map.of("minecraft:oak_planks", 5, "minecraft:stick", 1)));
-        assertEquals(List.of(Map.of("item", "any of " + PLANKS, "need", 3, "have", 1)),
+        assertEquals(List.of(Map.of("item", "any of minecraft:oak_planks, minecraft:birch_planks", "need", 3, "have", 1)),
             CraftPlan.missing(PICKAXE, Map.of("minecraft:birch_planks", 1, "minecraft:stick", 2)));
         assertEquals(List.of(), CraftPlan.missing(STICKS, Map.of("minecraft:oak_planks", 2)));
     }

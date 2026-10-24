@@ -41,8 +41,9 @@ sounds the track holds) and `bytes`. `mc.client.video.state` reports a recording
 
 `mc.client.sound.events` lists the sounds the client started playing: `id`
 (`minecraft:entity.zombie.ambient`), `subtitle` (as the subtitles show it), `source` (the volume channel),
-`x`/`y`/`z`, `distance`, `volume`, `pitch`. The newest 500 are kept; pass the returned `last` as `since`
-next time, as with `chat.read`. `contains` filters by id, subtitle or channel.
+`x`/`y`/`z`, `distance`, `volume`, `pitch`. The newest 500 are kept. Without `since` it answers the newest
+`limit` sounds; pass the returned `last` as `since` next time to get only what played after. `contains` filters
+by id, subtitle or channel.
 
 ## Options
 

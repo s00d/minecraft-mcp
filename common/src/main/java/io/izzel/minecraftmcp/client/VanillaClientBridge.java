@@ -107,11 +107,18 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
 
     public String minecraftVersion() { return MinecraftCompat.gameVersion(); }
     public boolean isOnClientThread() { return mc.isSameThread(); }
-    public void execute(Runnable runnable) { mc.execute(runnable); }
+    public void execute(Runnable runnable) {
+        // an agent's calls are the game's input: keep the frame limiter from treating it as away (AFK)
+        ClientCompat.markActive(mc);
+        mc.execute(runnable);
+    }
     public void pressKey(String key) {
         var keyMapping = InputConstants.getKey(KeyAliases.normalize(key));
         if (ClientCompat.screen(mc) != null) {
             ClientCompat.keyPressed(ClientCompat.screen(mc), keyMapping.getValue());
+        } else if (keyMapping.getValue() == InputConstants.KEY_ESCAPE) {
+            // not a key mapping: the game's keyboard handler opens the pause menu itself
+            mc.pauseGame(false);
         } else {
             KeyMapping.set(keyMapping, true);
             KeyMapping.click(keyMapping);
@@ -210,11 +217,34 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
             return Map.of("status", "used", "hand", interactionHand.name().toLowerCase(java.util.Locale.ROOT), "result", result.toString(), "consumesAction", result.consumesAction());
         });
     }
+    /**
+     * Why the player cannot work on this block (out of reach, or unbreakable when breaking), or null when it can.
+     * The server quietly ignores a block action from too far, so a tool would wait for nothing.
+     */
+    private Map<String, Object> blockRefusal(BlockPos pos, boolean breaking) {
+        var eye = mc.player.getEyePosition();
+        double dx = Math.max(Math.max(pos.getX() - eye.x, 0), eye.x - (pos.getX() + 1));
+        double dy = Math.max(Math.max(pos.getY() - eye.y, 0), eye.y - (pos.getY() + 1));
+        double dz = Math.max(Math.max(pos.getZ() - eye.z, 0), eye.z - (pos.getZ() + 1));
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        double range = mc.player.blockInteractionRange();
+        if (distance > range + 1.0) {
+            return Map.of("status", "out_of_reach", "x", pos.getX(), "y", pos.getY(), "z", pos.getZ(),
+                "distance", Math.round(distance * 100) / 100.0, "reach", range, "hint", "walk closer first (mc.client.movement.goto)");
+        }
+        if (breaking && mc.level.getBlockState(pos).getDestroySpeed(mc.level, pos) < 0 && !mc.player.isCreative()) {
+            return Map.of("status", "unbreakable", "x", pos.getX(), "y", pos.getY(), "z", pos.getZ(),
+                "block", net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(mc.level.getBlockState(pos).getBlock()).toString());
+        }
+        return null;
+    }
     public FutureResult<Map<String, Object>> attackBlock(int x, int y, int z, String face) {
         return action(() -> {
             if (mc.player == null || mc.level == null || mc.gameMode == null) return Map.of("status", "not_in_world", "x", x, "y", y, "z", z);
             Direction direction = direction(face);
             BlockPos pos = new BlockPos(x, y, z);
+            Map<String, Object> refusal = blockRefusal(pos, true);
+            if (refusal != null) return refusal;
             boolean started = mc.gameMode.startDestroyBlock(pos, direction);
             ClientCompat.swing(mc, InteractionHand.MAIN_HAND);
             return Map.of("status", "attacked_block", "x", x, "y", y, "z", z, "face", direction.getName(), "started", started);
@@ -236,8 +266,12 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
                 } else if (mc.player == null || mc.level == null || mc.gameMode == null) {
                     result.complete(Map.of("status", "not_in_world", "x", x, "y", y, "z", z));
                 } else if (mc.level.getBlockState(pos).isAir()) {
-                    result.complete(Map.of("status", "destroyed", "x", x, "y", y, "z", z, "face", direction.getName(),
+                    // air from the start: nothing was there to break
+                    result.complete(Map.of("status", attempts[0] == 0 ? "no_block" : "destroyed", "x", x, "y", y, "z", z, "face", direction.getName(),
                         "attempts", attempts[0], "elapsedMs", System.currentTimeMillis() - startedAt));
+                } else if (blockRefusal(pos, true) instanceof Map<String, Object> refusal) {
+                    if (attempts[0] > 0) mc.gameMode.stopDestroyBlock();
+                    result.complete(refusal);
                 } else {
                     if (attempts[0]++ == 0) {
                         AttackOverride.acquire();
@@ -276,9 +310,24 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
             return Map.of("status", "jumped");
         });
     }
+    @Override
+    public void prepareHeadless() {
+        window(false);
+        // nobody gives the window focus back: a singleplayer world would sit in its pause menu
+        mc.options.pauseOnLostFocus = false;
+        // nor gives input: the game would drop to 10 frames a second after ten idle minutes
+        ClientCompat.neverThrottleWhenIdle(mc);
+        ClientCompat.markActive(mc);
+    }
     public Map<String, Object> window(Boolean visible) {
         if (visible != null) ClientCompat.setWindowVisible(mc, visible);
-        return Map.of("visible", ClientCompat.windowVisible(mc));
+        Map<String, Object> state = new java.util.LinkedHashMap<>();
+        state.put("visible", ClientCompat.windowVisible(mc));
+        state.put("focused", mc.isWindowActive());
+        state.put("fps", mc.getFps());
+        String throttle = ClientCompat.frameThrottle(mc);
+        if (throttle != null) state.put("throttle", throttle);
+        return state;
     }
     public java.util.concurrent.CompletableFuture<?> reloadResources() {
         return mc.reloadResourcePacks();
@@ -326,9 +375,8 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
     }
     public Object serverMcpCall(String tool, Map<String, Object> arguments, long timeoutMs) throws Exception {
         requireOffGameThread("waiting for a server MCP response");
-        var peer = submit(() -> remoteMcpAvailable()
-                ? currentServerCaller()
-                : null).get(5, TimeUnit.SECONDS);
+        // plain reads of the current connection: not worth a wait for the next frame on every call
+        var peer = remoteMcpAvailable() ? currentServerCaller() : null;
         if (peer == null) {
             throw new IllegalStateException(mc.getSingleplayerServer() != null
                     ? "no remote server; this process has its own integrated server, use mc.server.* instead"
@@ -740,11 +788,80 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
         Direction direction = direction(face);
         InteractionHand interactionHand = hand(hand);
         BlockPos pos = new BlockPos(x, y, z);
+        Map<String, Object> refusal = blockRefusal(pos, false);
+        if (refusal != null) return refusal;
         Vec3 hit = Vec3.atCenterOf(pos);
         BlockHitResult hitResult = new BlockHitResult(hit, direction, pos, false);
         var result = mc.gameMode.useItemOn(mc.player, interactionHand, hitResult);
         if (result.consumesAction()) ClientCompat.swing(mc, interactionHand);
         return Map.of("status", "interacted", "result", result.toString(), "consumesAction", result.consumesAction(), "x", x, "y", y, "z", z, "face", direction.getName(), "hand", interactionHand.name().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * Places a block like a player: takes the item into the hand (in creative from nowhere), picks a solid neighbour
+     * face to click, looks at it and right-clicks it. Answers with what stands there afterwards.
+     */
+    public Map<String, Object> placeBlock(int x, int y, int z, String item) {
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return Map.of("status", "not_in_world", "x", x, "y", y, "z", z);
+        BlockPos pos = new BlockPos(x, y, z);
+        var registry = net.minecraft.core.registries.BuiltInRegistries.BLOCK;
+        if (!mc.level.getBlockState(pos).canBeReplaced()) {
+            return Map.of("status", "occupied", "x", x, "y", y, "z", z, "block", registry.getKey(mc.level.getBlockState(pos).getBlock()).toString());
+        }
+        Map<String, Object> refusal = blockRefusal(pos, false);
+        if (refusal != null) return refusal;
+        if (mc.player.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(pos))) {
+            return Map.of("status", "player_in_the_way", "x", x, "y", y, "z", z, "hint", "step aside first");
+        }
+        if (item != null && !item.isBlank()) {
+            Map<String, Object> equipped = equipItem(item, "main");
+            if ("not_found".equals(equipped.get("status")) && mc.player.isCreative()) {
+                var items = net.minecraft.core.registries.BuiltInRegistries.ITEM;
+                var found = items.stream().filter(i -> items.getKey(i).toString().equals(item)).findFirst();
+                if (found.isEmpty()) return Map.of("status", "unknown_item", "item", item);
+                ItemStack stack = new ItemStack(found.get());
+                int slot = MinecraftCompat.selectedSlot(mc.player.getInventory());
+                mc.player.getInventory().setItem(slot, stack);
+                mc.gameMode.handleCreativeModeItemAdd(stack, 36 + slot);
+            } else if (!equipped.get("status").toString().matches("already_held|selected|swapped")) {
+                return Map.of("status", "no_item", "item", item, "equip", equipped);
+            }
+        }
+        if (mc.player.getMainHandItem().isEmpty()) return Map.of("status", "no_item", "hint", "pass item, e.g. minecraft:oak_planks");
+        // the neighbour face nearest the eyes that has something solid behind it
+        Vec3 eye = mc.player.getEyePosition();
+        Direction best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (Direction direction : Direction.values()) {
+            BlockPos support = pos.relative(direction);
+            var state = mc.level.getBlockState(support);
+            if (state.isAir() || state.canBeReplaced() || reactsToClick(state.getBlock())) continue;
+            Vec3 faceCenter = Vec3.atCenterOf(pos).add(new Vec3(direction.getStepX(), direction.getStepY(), direction.getStepZ()).scale(0.5));
+            // a full block takes the click the way a player expects; a slab or a fence face only partly
+            double distance = faceCenter.distanceTo(eye) + (state.isCollisionShapeFullBlock(mc.level, support) ? 0 : 2);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = direction;
+            }
+        }
+        if (best == null) return Map.of("status", "no_support", "x", x, "y", y, "z", z, "hint", "place a block next to it first");
+        BlockPos support = pos.relative(best);
+        Vec3 hit = Vec3.atCenterOf(pos).add(new Vec3(best.getStepX(), best.getStepY(), best.getStepZ()).scale(0.5));
+        face(hit.x, hit.y, hit.z);
+        var result = mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, new BlockHitResult(hit, best.getOpposite(), support, false));
+        if (result.consumesAction()) ClientCompat.swing(mc, InteractionHand.MAIN_HAND);
+        String now = registry.getKey(mc.level.getBlockState(pos).getBlock()).toString();
+        boolean placed = !mc.level.getBlockState(pos).canBeReplaced();
+        return Map.of("status", placed ? "placed" : "not_placed", "x", x, "y", y, "z", z, "block", now,
+            "against", Map.of("x", support.getX(), "y", support.getY(), "z", support.getZ(), "face", best.getOpposite().getName()), "result", result.toString());
+    }
+
+    /** Blocks a right-click uses rather than builds against: doors, gates, containers, beds, buttons ... */
+    private static boolean reactsToClick(net.minecraft.world.level.block.Block block) {
+        return block instanceof net.minecraft.world.level.block.DoorBlock || block instanceof net.minecraft.world.level.block.TrapDoorBlock
+            || block instanceof net.minecraft.world.level.block.FenceGateBlock || block instanceof net.minecraft.world.level.block.BaseEntityBlock
+            || block instanceof net.minecraft.world.level.block.BedBlock || block instanceof net.minecraft.world.level.block.ButtonBlock
+            || block instanceof net.minecraft.world.level.block.LeverBlock || block instanceof net.minecraft.world.level.block.CraftingTableBlock;
     }
 
     public void createTestWorld(String name, long seed, boolean flat) {
@@ -796,6 +913,8 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
     public Map<String, Object> nearbyEntities(double radius, String type, int limit) { return ClientQueries.nearbyEntities(mc, radius, type, limit); }
     public Map<String, Object> crosshairTarget() { return ClientQueries.target(mc); }
     public Map<String, Object> findBlocks(String block, int radius, int limit) { return ClientQueries.findBlocks(mc, block, radius, limit); }
+    @Override public String look(double range, boolean grid, int cols, int rows) { return io.izzel.minecraftmcp.compat.Vision.look(mc, range, grid, cols, rows); }
+    @Override public String map(int radius, Integer y, Integer layers, boolean changes) { return io.izzel.minecraftmcp.compat.Vision.map(mc, radius, y, layers, changes); }
     public Map<String, Object> findInventoryItem(String item, String section, int limit) {
         if (mc.player == null) return Map.of("found", false, "totalCount", 0, "matches", java.util.List.of(), "inWorld", false);
         java.util.List<Map<String, Object>> matches = new java.util.ArrayList<>();

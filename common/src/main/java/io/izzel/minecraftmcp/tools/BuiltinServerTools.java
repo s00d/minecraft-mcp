@@ -106,11 +106,11 @@ public final class BuiltinServerTools {
         registry.register(destructive(tool("mc.server.player.restore", "Put a player back as player.save remembered them",
             List.of(playerWho, snapshotName), args -> bridge.submit(() -> bridge.playerRestore(playerWho.get(args), snapshotName.get(args))).get(10, TimeUnit.SECONDS))));
         registry.register(read(tool("mc.server.player.snapshots", "List the saved player snapshots", args -> bridge.submit(bridge::playerSnapshots).get(10, TimeUnit.SECONDS))));
-        Param<Long> eventsSince = Param.longInt("since", "only events after this sequence number (the last of a previous read)").or(0L);
+        Param<Long> eventsSince = Param.longInt("since", "only events after this sequence number (the last of a previous read); omit for the newest ones");
         Param<List<?>> eventTypes = Param.array("types", "only these: death, damage, attack, interact, block_break, block_place, pickup, "
             + "advancement, chat, join, leave, dimension");
         Param<String> eventContains = Param.string("contains", "only events mentioning this (a name, UUID, item or block id ...)");
-        Param<Integer> eventLimit = Param.integer("limit", "max events, oldest first").or(100);
+        Param<Integer> eventLimit = Param.integer("limit", "max events; with since the oldest after it first, without since the newest").or(100);
         registry.register(read(tool("mc.server.events.read", "Moments on the server, newest 1000 kept: deaths (cause, killer), damage, "
             + "attacks, entity interactions, blocks broken and placed, items picked up, advancements, chat, joins, leaves, dimension "
             + "changes. Pass the returned last as since next time", List.of(eventsSince, eventTypes, eventContains, eventLimit), args -> {
@@ -118,18 +118,20 @@ public final class BuiltinServerTools {
                     bridge.watchEvents();
                     return null;
                 }).get(10, TimeUnit.SECONDS);
-                return io.izzel.minecraftmcp.server.ServerEvents.read(eventsSince.get(args), types(eventTypes.get(args)), eventContains.get(args), eventLimit.get(args));
+                return io.izzel.minecraftmcp.server.ServerEvents.read(eventsSince.get(args) == null ? -1 : eventsSince.get(args), types(eventTypes.get(args)), eventContains.get(args), eventLimit.get(args));
             })));
         Param<Long> eventTimeout = Param.longInt("timeoutMs", "give up after this long").or(30_000L);
-        registry.register(read(tool("mc.server.events.wait", "Wait for a server moment (see events.read) after since: the guide dying, "
-            + "a player talking to an NPC, a block broken ...; returns it, or matched false at the timeout",
-            List.of(eventsSince, eventTypes, eventContains, eventTimeout), args -> {
+        Param<Long> waitSince = Param.longInt("since", "only events after this sequence number; omit to wait for events from now on");
+        registry.register(read(tool("mc.server.events.wait", "Wait for a server moment (see events.read): the guide dying, a player "
+            + "talking to an NPC, a block broken ...; without since only events from now on count. Returns it, or matched false at the timeout",
+            List.of(waitSince, eventTypes, eventContains, eventTimeout), args -> {
                 bridge.requireOffGameThread("waiting for a server event");
                 bridge.submit(() -> {
                     bridge.watchEvents();
                     return null;
                 }).get(10, TimeUnit.SECONDS);
-                var event = io.izzel.minecraftmcp.server.ServerEvents.await(eventsSince.get(args), types(eventTypes.get(args)), eventContains.get(args), eventTimeout.get(args));
+                long since = waitSince.get(args) != null ? waitSince.get(args) : io.izzel.minecraftmcp.server.ServerEvents.last();
+                var event = io.izzel.minecraftmcp.server.ServerEvents.await(since, types(eventTypes.get(args)), eventContains.get(args), eventTimeout.get(args));
                 long last = io.izzel.minecraftmcp.server.ServerEvents.last();
                 return event == null ? Map.of("matched", false, "last", last) : Map.of("matched", true, "event", event, "last", last);
             })));
@@ -193,5 +195,9 @@ public final class BuiltinServerTools {
             args -> bridge.submit(() -> bridge.exportSchematic(args)).get(30, TimeUnit.SECONDS)));
         registry.register(destructive(tool("mc.server.schematic.paste", "Paste a Sponge v3 schematic into the current server world", ServerSchematicTools.PASTE_PARAMS,
             args -> bridge.submit(() -> bridge.pasteSchematic(args)).get(30, TimeUnit.SECONDS))));
+        registry.register(read(tool("mc.server.schematic.diff", "Compare a schematic placed at origin with the world, as text in building "
+                + "order (bottom layer first): blocks still to place, to replace and to remove, with positions, and the items "
+                + "the missing blocks take. Build from it with mc.client.block.place, check the result by calling it again",
+            ServerSchematicTools.DIFF_PARAMS, args -> bridge.submit(() -> bridge.diffSchematic(args)).get(30, TimeUnit.SECONDS))));
     }
 }

@@ -118,13 +118,23 @@ public final class ServerEvents {
         }
     }
 
-    /** Events after {@code since}, of one of {@code types} when given, whose text contains {@code contains}. */
+    /**
+     * Events after {@code since}, of one of {@code types} when given, whose text contains {@code contains}; a
+     * negative {@code since} means the newest {@code limit} matching ones.
+     */
     public static Map<String, Object> read(long since, List<String> types, String contains, int limit) {
         List<Map<String, Object>> page = new ArrayList<>();
         long last;
         boolean more = false;
         synchronized (EVENTS) {
             last = sequence;
+            if (since < 0) {
+                for (var it = EVENTS.descendingIterator(); it.hasNext() && page.size() < Math.max(1, limit); ) {
+                    Map<String, Object> event = it.next();
+                    if (matches(event, types, contains)) page.add(0, event);
+                }
+                return Map.of("events", page, "last", last, "more", false, "newest", last);
+            }
             for (Map<String, Object> event : EVENTS) {
                 if ((Long) event.get("seq") <= since || !matches(event, types, contains)) continue;
                 if (page.size() >= Math.max(1, limit)) {
@@ -134,8 +144,10 @@ public final class ServerEvents {
                 page.add(event);
             }
         }
+        long newest = last;
         if (more) last = (Long) page.get(page.size() - 1).get("seq");
-        return Map.of("events", page, "last", last, "more", more);
+        // last continues this page; newest is where "from now on" starts
+        return Map.of("events", page, "last", last, "more", more, "newest", newest);
     }
 
     /** The first matching event after {@code since}, waiting up to {@code timeoutMs} for it; null when none came. */

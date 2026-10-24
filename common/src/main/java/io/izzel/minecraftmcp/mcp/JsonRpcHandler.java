@@ -202,7 +202,8 @@ public final class JsonRpcHandler {
                 withImage.put("isError", false);
                 return withImage;
             }
-            return content(Json.stringify(result), false);
+            // a text answer (mc.client.look, mc.client.map) goes out as it is, its lines unescaped
+            return content(result instanceof String text ? text : Json.stringify(result), false);
         } catch (ToolRegistry.UnknownToolException e) {
             throw new McpException(200, -32602, e.getMessage(), null);
         } catch (InterruptedException e) {

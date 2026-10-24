@@ -158,6 +158,35 @@ public final class ClientCompat {
         *///?}
     }
 
+    /**
+     * Counts as player input for the frame limiter: from 1.21.2 a client without input for a minute drops to 30 fps and
+     * after ten minutes to 10, and every MCP call waits for a frame, so an agent-driven game would crawl.
+     */
+    public static void markActive(Minecraft mc) {
+        //? if >=1.21.2 {
+        // null while the game is still starting (the endpoint starts first)
+        if (mc.getFramerateLimitTracker() != null) mc.getFramerateLimitTracker().onInputReceived();
+        //?}
+    }
+
+    /** Background frame rate cap only for a minimized window, never for "away from keyboard" (1.21.2+). */
+    public static void neverThrottleWhenIdle(Minecraft mc) {
+        //? if >=1.21.2 {
+        mc.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
+        //?}
+    }
+
+    /** Why the game caps its frame rate now (none, window_iconified, short_afk ...; before 1.21.6 only the cap), or null. */
+    public static String frameThrottle(Minecraft mc) {
+        //? if >=1.21.6 {
+        return mc.getFramerateLimitTracker() == null ? null : mc.getFramerateLimitTracker().getThrottleReason().name().toLowerCase(java.util.Locale.ROOT);
+        //?} else if >=1.21.2 {
+        /*return mc.getFramerateLimitTracker() == null ? null : "cap " + mc.getFramerateLimitTracker().getFramerateLimit();
+        *///?} else {
+        /*return null;
+        *///?}
+    }
+
     /** The background frame rate cap (1.21.2+), or null where the option does not exist. */
     public static net.minecraft.client.OptionInstance<?> inactivityFpsLimit(Minecraft mc) {
         //? if >=1.21.2 {

@@ -148,11 +148,12 @@ public final class BuiltinClientTools {
             + "set sound.master to 0 to mute. All or nothing: an unknown name or a value out of range changes nothing",
             List.of(optionSet, optionSave),
             args -> bridge.submit(() -> bridge.options(optionSet.get(args), optionSave.get(args))).get(10, TimeUnit.SECONDS)));
-        Param<Integer> soundLimit = Param.integer("limit", "max sounds, oldest first").or(50);
+        Param<Long> soundSince = Param.longInt("since", "only sounds after this sequence number (the last of a previous read); omit for the newest ones");
+        Param<Integer> soundLimit = Param.integer("limit", "max sounds; with since the oldest after it first, without since the newest").or(50);
         Param<String> soundContains = Param.string("contains", "only sounds whose id, subtitle or channel contains this");
         registry.register(read(tool("mc.client.sound.events", "Sounds the client started playing (id, subtitle, channel, position, distance, volume, "
-            + "pitch), newest 500 kept; pass the returned last as since next time", List.of(SINCE, soundContains, soundLimit),
-            args -> bridge.soundEvents(SINCE.get(args), soundContains.get(args), soundLimit.get(args)))));
+            + "pitch), newest 500 kept; pass the returned last as since next time", List.of(soundSince, soundContains, soundLimit),
+            args -> bridge.soundEvents(soundSince.get(args) == null ? -1 : soundSince.get(args), soundContains.get(args), soundLimit.get(args)))));
         Param<String> videoName = Param.string("name", "file name under videos/ (default: timestamped)").or("");
         Param<Integer> videoFps = Param.integer("fps", "frames per second, 1-20 (one frame per game tick at most)").or(20);
         Param<Integer> videoWidth = Param.integer("maxWidth", "scale the video down to this width").or(1280);
@@ -305,7 +306,7 @@ public final class BuiltinClientTools {
         Param<Integer> gotoZ = Param.integer("z", "target block Z").required();
         Param<Double> gotoTolerance = Param.number("tolerance", "blocks from the target that count as arrived").or(1.0);
         Param<Boolean> gotoSprint = Param.bool("sprint", "sprint on straight stretches").or(true);
-        Param<Integer> gotoNodes = Param.integer("maxNodes", "search limit per plan; a goal beyond it is approached in steps").or(30_000);
+        Param<Integer> gotoNodes = Param.integer("maxNodes", "search limit per plan; a goal beyond it is approached in steps").or(12_000);
         Param<Boolean> gotoDry = Param.bool("dryRun", "only search: report whether there is a path and return it, without walking").or(false);
         Param<Long> gotoTimeout = Param.longInt("timeoutMs", "give up walking after this long").or(60_000L);
         registry.register(tool("mc.client.movement.goto", "Walk to a block like a player: searches a path (walk, diagonal, jump up one "
@@ -335,6 +336,22 @@ public final class BuiltinClientTools {
             args -> bridge.submit(() -> bridge.blockAt(X.get(args), Y.get(args), Z.get(args))).get(10, TimeUnit.SECONDS))));
         registry.register(tool("mc.client.block.interact", "Right-click a block through the normal client interaction path", List.of(X, Y, Z, FACE, HAND),
             args -> bridge.submit(() -> bridge.interactBlock(X.get(args), Y.get(args), Z.get(args), FACE.get(args), HAND.get(args))).get(10, TimeUnit.SECONDS)));
+        Param<String> placeItem = Param.string("item", "item to place, e.g. minecraft:oak_planks; taken into the hand from the inventory (in creative from nowhere); default the held item");
+        registry.register(tool("mc.client.block.place", "Place a block at x y z like a player: takes the item into the hand, clicks a solid "
+                + "neighbour face, waits for the server to confirm, answers placed, rejected (the server undid it), occupied, "
+                + "no_support, out_of_reach, player_in_the_way or no_item",
+            List.of(X, Y, Z, placeItem), args -> {
+                Map<String, Object> placed = bridge.submit(() -> bridge.placeBlock(X.get(args), Y.get(args), Z.get(args), placeItem.get(args))).get(10, TimeUnit.SECONDS);
+                if (!"placed".equals(placed.get("status"))) return placed;
+                // the client shows its own guess at once; a round trip later the server has answered the click
+                bridge.commandSuggest("/", 5000);
+                Map<String, Object> now = bridge.submit(() -> bridge.blockAt(X.get(args), Y.get(args), Z.get(args))).get(10, TimeUnit.SECONDS);
+                if (now.get("block").equals(placed.get("block"))) return placed;
+                Map<String, Object> rejected = new LinkedHashMap<>(placed);
+                rejected.put("status", "rejected");
+                rejected.put("block", now.get("block"));
+                return rejected;
+            }));
         registry.register(read(tool("mc.client.target", "What the crosshair points at: a block (position, face, id), an entity, or nothing",
             args -> bridge.submit(bridge::crosshairTarget).get(10, TimeUnit.SECONDS))));
         Param<Double> radius = Param.number("radius", "search radius in blocks").or(16.0);
@@ -343,12 +360,41 @@ public final class BuiltinClientTools {
         registry.register(read(tool("mc.client.entities.nearby", "Entities the client sees around the player, nearest first; works on any server",
             List.of(radius, entityType, limit),
             args -> bridge.submit(() -> bridge.nearbyEntities(radius.get(args), entityType.get(args), limit.get(args))).get(10, TimeUnit.SECONDS))));
-        Param<String> blockId = Param.string("block", "block id, e.g. minecraft:diamond_ore").required();
+        Param<String> blockId = Param.string("block", "block id, e.g. minecraft:diamond_ore, or several separated by commas: iron_ore,deepslate_iron_ore").required();
         Param<Integer> blockRadius = Param.integer("radius", "half size of the searched cube around the player, up to 32").or(8);
         registry.register(read(tool("mc.client.blocks.find", "Find blocks of one type around the player, nearest first",
             List.of(blockId, blockRadius, limit), args -> {
                 int r = Math.min(32, Math.max(0, blockRadius.get(args)));
                 return bridge.submit(() -> bridge.findBlocks(blockId.get(args), r, limit.get(args))).get(30, TimeUnit.SECONDS);
+            })));
+
+        Param<Double> range = Param.number("range", "how far to look, up to 128 blocks").or(48.0);
+        Param<Boolean> grid = Param.bool("grid", "also draw the view as rows of characters (letters blocks, digits entities)").or(false);
+        Param<Integer> gridCols = Param.integer("cols", "grid characters per row, up to 48").or(25);
+        Param<Integer> gridRows = Param.integer("rows", "grid rows, up to 27").or(13);
+        registry.register(read(tool("mc.client.look", "What the camera sees, as short text instead of a screenshot: position and facing, "
+                + "the crosshair target, what the player stands on and in, what is right ahead of the feet (wall, step, drop), "
+                + "then groups of visible blocks and the entities, each with its direction from the player (ahead, ahead-left, "
+                + "left, behind ..., up-/down- when steep), distance, count and position; entities with their id for entity.attack/interact",
+            List.of(range, grid, gridCols, gridRows), args -> {
+                double far = Math.min(128, Math.max(1, range.get(args)));
+                int c = Math.min(48, Math.max(1, gridCols.get(args)));
+                int r = Math.min(27, Math.max(1, gridRows.get(args)));
+                return bridge.submit(() -> bridge.look(far, grid.get(args), c, r)).get(10, TimeUnit.SECONDS);
+            })));
+        Param<Integer> mapRadius = Param.integer("radius", "blocks to each side of the player, up to 24").or(8);
+        Param<Integer> mapY = Param.integer("y", "draw the raw blocks of this layer instead of the walk map");
+        Param<Integer> layers = Param.integer("layers", "raw block layers from y (default the feet) up, up to 16");
+        Param<Boolean> changes = Param.bool("changes", "only list the blocks that changed since the previous map call (4 below to 8 above the feet)").or(false);
+        registry.register(read(tool("mc.client.map", "Top-down text map around the player, north up, rows dz and columns dx from the "
+                + "player: where one can walk at the feet level (. floor, # blocked, + step up, - step down, _ drop, ~ water, "
+                + "! lava, D door, @ you, digits the listed entities), then the entities and notable blocks nearby (ores, logs, "
+                + "chests, beds, crops, lava) with count, nearest distance, compass direction and position. y/layers draw raw "
+                + "block slices instead. changes=true only lists what changed since the previous map: call map, act, call again",
+            List.of(mapRadius, mapY, layers, changes), args -> {
+                int r = Math.min(24, Math.max(0, mapRadius.get(args)));
+                Integer n = layers.get(args) == null ? null : Math.min(16, Math.max(1, layers.get(args)));
+                return bridge.submit(() -> bridge.map(r, mapY.get(args), n, changes.get(args))).get(10, TimeUnit.SECONDS);
             })));
 
         // --- worlds and connections
@@ -390,6 +436,7 @@ public final class BuiltinClientTools {
             args -> bridge.submit(bridge::disconnectState).get(10, TimeUnit.SECONDS))));
         registry.register(tool("mc.client.connection.sync", "Synchronize with the server using a vanilla command suggestion round-trip", List.of(TIMEOUT), args -> {
             Map<String, Object> synced = new LinkedHashMap<>(bridge.commandSuggest("/", TIMEOUT.get(args)));
+            synced.remove("texts");
             synced.put("status", "synced");
             return synced;
         }));

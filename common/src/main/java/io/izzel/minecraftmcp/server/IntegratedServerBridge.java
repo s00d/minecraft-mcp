@@ -141,6 +141,11 @@ public final class IntegratedServerBridge implements MinecraftServerBridge {
     }
 
     @Override
+    public String diffSchematic(Map<String, Object> args) {
+        return require().diffSchematic(args);
+    }
+
+    @Override
     public Map<String, Object> pasteSchematic(Map<String, Object> args) {
         return require().pasteSchematic(args);
     }

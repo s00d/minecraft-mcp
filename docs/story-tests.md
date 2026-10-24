@@ -8,7 +8,7 @@ below cover what a command cannot do.
 
 | Need | Use |
 |---|---|
-| Put someone on a spot, turn them, summon an actor | `/tp`, `/rotate`, `/summon minecraft:villager x y z {Tags:["guide"],NoAI:1b,CustomName:'"Guide"'}` via `mc.server.command.run` |
+| Put someone on a spot, turn them, summon an actor | `/tp`, `/rotate`, `/summon minecraft:villager x y z {Tags:["guide"],NoAI:1b,CustomName:"Guide"}` via `mc.server.command.run` (before 1.21.5 a name is JSON text: `CustomName:'"Guide"'`) |
 | Freeze a mob's AI, make it invulnerable or silent | `/data merge entity <uuid> {NoAI:1b,Invulnerable:1b,Silent:1b}` |
 | Lines of dialogue, titles | `/tellraw`, `/title`; the player reads them with `mc.client.chat.read` / `chat.wait` |
 | Time, weather, game rules, freezing the world | `mc.server.time`, `mc.server.tick` (freeze, step), `/gamerule` |
@@ -21,6 +21,14 @@ below cover what a command cannot do.
 | **Wait for a moment** (a death, a click, a block, a line of chat) | `mc.server.events.read` / `events.wait` |
 | The player's own part | `mc.client.movement.goto`, `entity.interact`, `mouse.*`, `craft`, screens and widgets |
 | Run the scene as a test | a `.js` file in a scenario directory, run by `mc.scenario.batch.run` |
+
+## On a dedicated server
+
+The same tools work from a client connected to a server that runs the mod: a client without a world of its own
+sends `mc.server.*` to the server over the plugin channel (about one server tick a call, against about a
+millisecond on the server's own endpoint). The server must be in the client's `access.trustedServers`, and the
+player needs the `minecraft_mcp:remote.call` permission (operators have it). Singleplayer pauses when its window
+loses focus unless `pauseOnLostFocus` is off (`mc.client.options`); a dedicated server never pauses.
 
 ## The staging tools
 
@@ -41,7 +49,8 @@ below cover what a command cannot do.
 ## Events
 
 `mc.server.events.read {since, types, contains}` lists what happened, newest 1000 kept, each with `seq` and
-`tick`; `events.wait` waits for the first match after `since`. Types:
+`tick`: without `since` the newest `limit` matching ones, with `since` the ones after it, oldest first (page with
+the returned `last`). `events.wait` waits for the first match after `since`. Types:
 
 | Type | Fields |
 |---|---|
@@ -55,7 +64,9 @@ below cover what a command cannot do.
 | `chat` | `player`, `message` |
 | `join` / `leave` / `dimension` | `player`, dimensions |
 
-Take `last` from a read before an action and pass it as `since`, so the wait only sees what the action caused.
+`events.wait` without `since` only counts events from the moment it is called; to also catch one that may
+happen while you set up, take `newest` from a read before the action and pass it as `since`. (`last` is the
+paging cursor of that read: with `limit`, it stops at the last event returned.)
 
 ## A story test as a script
 
@@ -75,7 +86,7 @@ mc.server.player.save({player: me, name: "before-greeting"});
 
 step("stage", () => {
   cmd("kill @e[tag=guide]");
-  cmd(`summon minecraft:villager 10 -60 0 {Tags:["guide"],CustomName:'"Guide"',Invulnerable:1b}`);
+  cmd(`summon minecraft:villager 10 -60 0 {Tags:["guide"],CustomName:"Guide",Invulnerable:1b}`);
   const guide = mc.server.entity.query({tag: "guide"}).entities[0];
   mc.server.entity.pin({who: guide.uuid});
   mc.server.entity.look({who: guide.uuid, at: me});
@@ -88,7 +99,7 @@ step("walk up", () => {
 });
 
 step("talk", () => {
-  const before = mc.server.events.read({limit: 1}).last;
+  const before = mc.server.events.read({limit: 1}).newest;
   const guide = mc.server.entity.query({tag: "guide"}).entities[0];
   mc.client.entity.interact({id: guide.id});
   const e = mc.server.events.wait({since: before, types: ["interact"], contains: "guide", timeoutMs: 5000});

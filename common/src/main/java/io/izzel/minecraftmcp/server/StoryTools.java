@@ -167,6 +167,11 @@ public final class StoryTools {
         points.add(entity.position());
         boolean pathed = false;
         if (entity instanceof Mob mob) {
+            // navigation only plans for a mob standing on something; one just let go of a pin (or teleported) may
+            // not be marked as on the ground yet although it stands on a block
+            if (!mob.onGround() && !mob.level().getBlockState(mob.blockPosition().below()).getCollisionShape(mob.level(), mob.blockPosition().below()).isEmpty()) {
+                mob.setOnGround(true);
+            }
             var path = mob.getNavigation().createPath(x, y, z, 0);
             if (path == null) {
                 result.complete(Map.of("status", "no_path", "uuid", entity.getUUID().toString()));

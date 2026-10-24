@@ -4,7 +4,12 @@ A Minecraft client still needs a graphics context, so CI runs it on a virtual di
 truly headless. `endpoint.headless=true` hides the game window as soon as the endpoint starts (GLFW;
 SDL3 on 26.3): the client keeps rendering, so screenshots still work, but an automated run on a
 desktop neither steals focus nor picks up stray clicks. `mc.client.window` shows or hides it at
-runtime.
+runtime and reports `fps` and why the game caps it (`throttle`).
+
+A hidden client is also set up to be driven without a person at it: `pauseOnLostFocus` is turned off (a
+singleplayer world would otherwise sit in its pause menu) and the background frame cap only applies to a
+minimized window (`inactivityFpsLimit: minimized`), so the game does not drop to 10 frames a second after ten
+minutes without input. A tool call then takes one frame, about 10 ms.
 
 Recommended Linux command (Gradle tasks need a Minecraft version):
 

@@ -63,5 +63,6 @@ public final class VanillaServerBridge implements MinecraftServerBridge {
     public java.util.concurrent.CompletableFuture<Map<String, Object>> reload() { return ServerTime.reload(server); }
     public Map<String, Object> exportSchematic(Map<String, Object> args) { return ServerSchematicTools.exportSchematic(server.overworld(), gameDirectory(), args); }
     public Map<String, Object> pasteSchematic(Map<String, Object> args) { return ServerSchematicTools.pasteSchematic(server.overworld(), gameDirectory(), args); }
+    @Override public String diffSchematic(Map<String, Object> args) { return ServerSchematicTools.diffSchematic(server.overworld(), gameDirectory(), args); }
     public void shutdownServer() { server.halt(false); }
 }

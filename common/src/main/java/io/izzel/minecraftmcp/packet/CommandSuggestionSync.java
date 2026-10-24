@@ -81,6 +81,8 @@ public final class CommandSuggestionSync {
                 "command", command,
                 "id", id,
                 "suggestions", packet.suggestions().size(),
+                // what the chat box would offer, so an agent can complete the command
+                "texts", packet.suggestions().stream().limit(50).map(ClientboundCommandSuggestionsPacket.Entry::text).toList(),
                 "start", packet.start(),
                 "length", packet.length(),
                 "latencyMs", latencyMs
