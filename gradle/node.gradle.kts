@@ -32,3 +32,14 @@ tasks.withType<Test>().configureEach {
     // Tests bootstrap Minecraft, whose JOML would otherwise use sun.misc.Unsafe (deprecated for removal on Java 24+).
     systemProperty("joml.nounsafe", "true")
 }
+
+// Rhino runs mc.script.run. It has no dependencies of its own; the loader jars carry its classes.
+val rhino = "org.mozilla:rhino:${rootProject.property("rhino_version")}"
+dependencies.add("implementation", rhino)
+if (project.parent?.name != "common") {
+    val shade = configurations.create("shade")
+    dependencies.add("shade", rhino)
+    tasks.named<Jar>("jar") {
+        from({ shade.map { zipTree(it) } }) { exclude("module-info.class", "META-INF/MANIFEST.MF") }
+    }
+}

@@ -68,6 +68,11 @@ public final class ToolRegistry {
         return result;
     }
 
+    /** Like {@link #call}, but hands back a tool's FutureResult as it is instead of waiting for it. */
+    public Object callNow(String name, Map<String, Object> args) throws Exception {
+        return find(name).orElseThrow(() -> new UnknownToolException(name)).call(args == null ? Map.of() : args);
+    }
+
     /** Disabled by name, or a tool that changes the game while access.readOnly is on. */
     private boolean hidden(McpTool tool) {
         McpConfig config = policy.get();

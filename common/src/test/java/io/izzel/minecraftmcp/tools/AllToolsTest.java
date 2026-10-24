@@ -94,6 +94,15 @@ class AllToolsTest {
             assertEquals("object", schema.get("type"), tool.name());
 
             Map<String, Object> args = arguments(schema, side);
+            // the script tools named "hello" need it saved, whichever ran before (save, delete)
+            if (tool.name().equals("mc.client.screenshot.grid")) {
+                java.nio.file.Files.createDirectories(gameDirectory.resolve("screenshots"));
+                io.izzel.minecraftmcp.util.ImagesGridTest.picture(gameDirectory.resolve("screenshots"), "mcp-1.png", 32, 18, 0x336699);
+            }
+            if (tool.name().startsWith("mc.script.")) {
+                java.nio.file.Files.createDirectories(gameDirectory.resolve("mcp/scripts"));
+                java.nio.file.Files.writeString(gameDirectory.resolve("mcp/scripts/hello.js"), "return 1");
+            }
             Map<String, Object> withUnknown = new HashMap<>(args);
             withUnknown.put("noSuchArgument", 1);
             IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
@@ -120,6 +129,7 @@ class AllToolsTest {
         Map<String, Object> args = new LinkedHashMap<>();
         for (String name : required) args.put(name, value(name, (Map<String, Object>) properties.get(name), side));
         if (properties.containsKey("timeoutMs")) args.put("timeoutMs", 200);
+        if (properties.containsKey("code") && !required.contains("code")) args.put("code", "return mc.debug.capabilities()");
         return args;
     }
 

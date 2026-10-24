@@ -58,6 +58,7 @@ public final class BuiltinCommonTools {
         Param<Boolean> keepGoing = Param.bool("keepGoing", "run the remaining calls after one fails").or(false);
         registry.register(destructive(tool("mc.batch", "Run several tool calls in one request, in order, and return every result; "
             + "stops at the first failure unless keepGoing", List.of(calls, keepGoing), args -> batch(registry, calls.get(args), keepGoing.get(args)))));
+        io.izzel.minecraftmcp.script.ScriptTools.register(registry, bridge);
         registry.register(read(tool("mc.scenario.report", "Return latest scenario report",
             args -> scenarios.latestReport().map(report -> report.toMap()).orElse(Map.of("status", "none")))));
     }
