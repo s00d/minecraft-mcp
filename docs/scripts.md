@@ -28,6 +28,8 @@ you go.
 | `run(name, args)` | Runs a saved script and returns its result (nested up to 8 deep) |
 | `sync(() => ...)` | Runs the block on the game thread in one go and returns its value. See below |
 | `args` | The `args` object passed to `mc.script.run` |
+| `assert(cond, message)`, `assertEquals(actual, expected, message)` | Throw when the check fails (values compared as JSON) |
+| `step(name, fn)` | Runs `fn` as a named beat; the report's `steps` lists each with `passed`/`failed` and its time |
 
 `mc.script.*` and `mc.batch` are not callable from a script. Tools disabled in the configuration, or
 hidden by `access.readOnly`, stay unavailable inside scripts too.
@@ -77,6 +79,11 @@ newest 20 finished runs stay readable.
 `mc.script.save {name, code}` writes `mcp/scripts/<name>.js` under the game directory; a first line `//`
 comment is its description in `mc.script.list`. Run one with `mc.script.run {name, args}`, or from another
 script with `run(name, args)`. `mc.script.get` and `mc.script.delete` read and remove them.
+
+## Scripts as scenarios
+
+A `.js` file in a scenario directory runs as a scenario under `mc.scenario.batch.run`, next to the JSON ones:
+it passes unless it throws. See [story-tests.md](story-tests.md).
 
 ## Limits
 

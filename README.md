@@ -136,7 +136,8 @@ An overview:
 | Packets | `packet.recording.start/stop/clear/status`, `packet.dump`, `packet.wait` (filters by direction, name, class, expression) |
 | Time and speed | `mc.server.time` (read, set or move the day time), `mc.server.tick` (tick rate, freeze, step, sprint: fast-forward thousands of ticks and wait for them) |
 | Mod development | `mc.mods.list`, `mc.registry.list` (what is registered, filtered by your mod id), `mc.crash.latest`, `mc.client.log.tail` / `mc.server.log.tail` (`contains: "ERROR"`), `mc.server.reload` (data packs), `mc.client.resources.reload` (resource packs, like F3+T) |
-| Server | `mc.server.state`, `players`, `player.state`, `player.inventory`, `connection.list`, `world.list`, `world.snapshot`, `block.state`, `block.set`, `entity.query`, `chunk.state`, `tick.stats`, `ticks.wait`, `condition.wait`, `command.run` (captures output), `shutdown` |
+| Server | `mc.server.state`, `players`, `player.state`, `player.inventory`, `connection.list`, `world.list`, `world.snapshot`, `block.state`, `block.set`, `entity.query` (by box, type, tag, name or UUID; health, AI, target, pin state ...), `chunk.state`, `tick.stats`, `ticks.wait`, `condition.wait`, `command.run` (captures output), `shutdown` |
+| Story tests | `mc.server.entity.pin` / `unpin` (hold anyone on a spot), `entity.move` (walk a mob along its own path), `entity.look`, `player.save` / `restore` / `snapshots`, `events.read` / `events.wait` (deaths, damage, attacks, interactions, blocks, pickups, advancements, chat, joins); `.js` scenarios with `assert`, `assertEquals`, `step`. See [docs/story-tests.md](docs/story-tests.md) |
 | Schematics | `mc.server.schematic.export`, `mc.server.schematic.paste`, `mc.schematic.info` (Sponge v3, with block entities, entities and biomes) |
 | Scripts | `mc.script.run` (JavaScript run inside the game: every tool as `mc.client.player.state()`, loops, conditions, `wait`, `until`; one round trip for a whole chain, or `background: true`), `script.status`, `script.stop`, `script.save` / `list` / `get` / `delete`. See [docs/scripts.md](docs/scripts.md) |
 | Many calls at once | `mc.batch` (a list of `{tool, args}`, one round trip, stops at the first failure unless `keepGoing`) |
@@ -282,6 +283,7 @@ A manual run (`workflow_dispatch`) only builds and uploads the jars as an artifa
 | [agent-usage.md](docs/agent-usage.md) | Connecting an agent |
 | [scripts.md](docs/scripts.md) | JavaScript micro scripts: `mc.script.run` |
 | [media.md](docs/media.md) | Video recording, sound events, client options |
+| [story-tests.md](docs/story-tests.md) | Staging scenes: pins, walking mobs, player snapshots, server events, JS scenarios |
 | [scenarios.md](docs/scenarios.md), [scenario-conditions.md](docs/scenario-conditions.md) | Scenario files and condition expressions |
 | [server-tools.md](docs/server-tools.md) | `mc.server.*` |
 | [player-action-tools.md](docs/player-action-tools.md), [inventory-container-tools.md](docs/inventory-container-tools.md) | Player and inventory tools |

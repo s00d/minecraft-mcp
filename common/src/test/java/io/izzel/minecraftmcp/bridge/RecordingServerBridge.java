@@ -40,6 +40,15 @@ public class RecordingServerBridge extends FakeServerBridge {
     @Override public Map<String, Object> blockAt(String dimension, int x, int y, int z) { return record("blockAt", dimension, x, y, z); }
     @Override public Map<String, Object> setBlock(String dimension, int x, int y, int z, String blockState) { return record("setBlock", dimension, x, y, z, blockState); }
     @Override public Map<String, Object> entityQuery(Map<String, Object> args) { return record("entityQuery", args.get("type")); }
+    @Override public Map<String, Object> entityPin(String who, Double x, Double y, Double z, Float yaw, Float pitch, long ticks) { return record("entityPin", who, x, ticks); }
+    @Override public Map<String, Object> entityUnpin(String who) { return record("entityUnpin", who); }
+    @Override public Map<String, Object> entityLook(String who, Double x, Double y, Double z, String at) { return record("entityLook", who, at); }
+    @Override public io.izzel.minecraftmcp.mcp.FutureResult<Map<String, Object>> entityMove(String who, double x, double y, double z, double speed) {
+        return io.izzel.minecraftmcp.mcp.FutureResult.completed(record("entityMove", who, x, y, z, speed), Runnable::run);
+    }
+    @Override public Map<String, Object> playerSave(String who, String name) { return record("playerSave", who, name); }
+    @Override public Map<String, Object> playerRestore(String who, String name) { return record("playerRestore", who, name); }
+    @Override public Map<String, Object> playerSnapshots() { return record("playerSnapshots"); }
     @Override public Map<String, Object> chunkState(String dimension, int chunkX, int chunkZ) { return record("chunkState", dimension, chunkX, chunkZ); }
     @Override public Map<String, Object> tickStats() { return record("tickStats"); }
     @Override public Map<String, Object> time(String dimension, Long set, Long add) { return record("time", dimension, set, add); }

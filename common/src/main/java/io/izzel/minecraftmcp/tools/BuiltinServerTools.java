@@ -34,6 +34,10 @@ public final class BuiltinServerTools {
     private static final Param<Integer> Z = Param.integer("z", "block Z").required();
     private static final Param<Long> TIMEOUT = Param.longInt("timeoutMs", "give up after this many milliseconds").or(30000L);
 
+    private static List<String> types(List<?> values) {
+        return values == null ? List.of() : values.stream().map(String::valueOf).toList();
+    }
+
     public static void register(ToolRegistry registry, MinecraftServerBridge bridge) {
         registry.register(read(tool("mc.server.state", "Get server state", args -> bridge.submit(bridge::serverState).get(10, TimeUnit.SECONDS))));
         Param<String> command = Param.string("command", "command, with or without the leading /").required();
@@ -63,8 +67,72 @@ public final class BuiltinServerTools {
         Param<String> block = Param.string("block", "block state, e.g. minecraft:stone or minecraft:oak_log[axis=x]").required();
         registry.register(destructive(tool("mc.server.block.set", "Set a block, so a following block.state can assert it", List.of(X, Y, Z, block, DIMENSION),
             args -> bridge.submit(() -> bridge.setBlock(DIMENSION.get(args), X.get(args), Y.get(args), Z.get(args), block.get(args))).get(10, TimeUnit.SECONDS))));
-        registry.register(read(tool("mc.server.entity.query", "Query entities in a dimension by box and optional type", ServerWorldTools.ENTITY_QUERY_PARAMS,
+        registry.register(read(tool("mc.server.entity.query", "Find entities in a dimension by box, type, tag, name or UUID, with health, tags, AI, target, vehicle, held items and pin state", ServerWorldTools.ENTITY_QUERY_PARAMS,
             args -> bridge.submit(() -> bridge.entityQuery(args)).get(30, TimeUnit.SECONDS))));
+        Param<String> who = Param.string("who", "player name or UUID, or an entity UUID (entity.query finds it by tag or name)").required();
+        Param<Double> atX = Param.number("x", "X (default: where it is now)");
+        Param<Double> atY = Param.number("y", "Y");
+        Param<Double> atZ = Param.number("z", "Z");
+        Param<Double> yaw = Param.number("yaw", "yaw in degrees (default: as it is)");
+        Param<Double> pitch = Param.number("pitch", "pitch in degrees");
+        Param<Long> pinTicks = Param.longInt("ticks", "release after this many ticks; 0 holds until entity.unpin").or(0L);
+        registry.register(destructive(tool("mc.server.entity.pin", "Hold a player or entity at a spot and rotation every server tick until "
+            + "released: nothing moves it, not its AI, knockback or the player's own keys. For staged scenes and repeatable tests",
+            List.of(who, atX, atY, atZ, yaw, pitch, pinTicks), args -> bridge.submit(() -> bridge.entityPin(who.get(args), atX.get(args), atY.get(args),
+                atZ.get(args), yaw.get(args) == null ? null : yaw.get(args).floatValue(), pitch.get(args) == null ? null : pitch.get(args).floatValue(),
+                pinTicks.get(args))).get(10, TimeUnit.SECONDS))));
+        Param<String> unpinWho = Param.string("who", "player name or entity UUID; omit or \"all\" to release every pin");
+        registry.register(tool("mc.server.entity.unpin", "Release pinned players or entities", List.of(unpinWho),
+            args -> bridge.submit(() -> bridge.entityUnpin(unpinWho.get(args))).get(10, TimeUnit.SECONDS)));
+        Param<String> lookAt = Param.string("at", "look at this player or entity (its eyes) instead of x/y/z");
+        registry.register(destructive(tool("mc.server.entity.look", "Turn a player or entity to look at a point or at another actor; a pinned one keeps looking there",
+            List.of(who, atX, atY, atZ, lookAt), args -> bridge.submit(() -> bridge.entityLook(who.get(args), atX.get(args), atY.get(args), atZ.get(args),
+                lookAt.get(args))).get(10, TimeUnit.SECONDS))));
+        Param<Double> toX = Param.number("x", "target X").required();
+        Param<Double> toY = Param.number("y", "target Y").required();
+        Param<Double> toZ = Param.number("z", "target Z").required();
+        Param<Double> speed = Param.number("speed", "blocks per second (a walking mob does about 4)").or(4.0);
+        Param<Long> moveTimeout = Param.longInt("timeoutMs", "give up after this long").or(60_000L);
+        registry.register(destructive(tool("mc.server.entity.move", "Walk a mob to a spot along a path from its own navigation, its AI paused "
+            + "meanwhile so nothing steers it away (restored after); any other entity moves in a straight line. Players walk with "
+            + "mc.client.movement.goto", List.of(who, toX, toY, toZ, speed, moveTimeout),
+            args -> bridge.submit(() -> bridge.entityMove(who.get(args), toX.get(args), toY.get(args), toZ.get(args), speed.get(args)))
+                .get(10, TimeUnit.SECONDS))));
+        Param<String> playerWho = Param.string("player", "player name or UUID").required();
+        Param<String> snapshotName = Param.string("name", "snapshot name, per player").or("default");
+        registry.register(tool("mc.server.player.save", "Remember a player's state: inventory, position and dimension, health, food, "
+            + "experience, effects, game mode, fire and air; player.restore puts it back (kept until the server stops)",
+            List.of(playerWho, snapshotName), args -> bridge.submit(() -> bridge.playerSave(playerWho.get(args), snapshotName.get(args))).get(10, TimeUnit.SECONDS)));
+        registry.register(destructive(tool("mc.server.player.restore", "Put a player back as player.save remembered them",
+            List.of(playerWho, snapshotName), args -> bridge.submit(() -> bridge.playerRestore(playerWho.get(args), snapshotName.get(args))).get(10, TimeUnit.SECONDS))));
+        registry.register(read(tool("mc.server.player.snapshots", "List the saved player snapshots", args -> bridge.submit(bridge::playerSnapshots).get(10, TimeUnit.SECONDS))));
+        Param<Long> eventsSince = Param.longInt("since", "only events after this sequence number (the last of a previous read)").or(0L);
+        Param<List<?>> eventTypes = Param.array("types", "only these: death, damage, attack, interact, block_break, block_place, pickup, "
+            + "advancement, chat, join, leave, dimension");
+        Param<String> eventContains = Param.string("contains", "only events mentioning this (a name, UUID, item or block id ...)");
+        Param<Integer> eventLimit = Param.integer("limit", "max events, oldest first").or(100);
+        registry.register(read(tool("mc.server.events.read", "Moments on the server, newest 1000 kept: deaths (cause, killer), damage, "
+            + "attacks, entity interactions, blocks broken and placed, items picked up, advancements, chat, joins, leaves, dimension "
+            + "changes. Pass the returned last as since next time", List.of(eventsSince, eventTypes, eventContains, eventLimit), args -> {
+                bridge.submit(() -> {
+                    bridge.watchEvents();
+                    return null;
+                }).get(10, TimeUnit.SECONDS);
+                return io.izzel.minecraftmcp.server.ServerEvents.read(eventsSince.get(args), types(eventTypes.get(args)), eventContains.get(args), eventLimit.get(args));
+            })));
+        Param<Long> eventTimeout = Param.longInt("timeoutMs", "give up after this long").or(30_000L);
+        registry.register(read(tool("mc.server.events.wait", "Wait for a server moment (see events.read) after since: the guide dying, "
+            + "a player talking to an NPC, a block broken ...; returns it, or matched false at the timeout",
+            List.of(eventsSince, eventTypes, eventContains, eventTimeout), args -> {
+                bridge.requireOffGameThread("waiting for a server event");
+                bridge.submit(() -> {
+                    bridge.watchEvents();
+                    return null;
+                }).get(10, TimeUnit.SECONDS);
+                var event = io.izzel.minecraftmcp.server.ServerEvents.await(eventsSince.get(args), types(eventTypes.get(args)), eventContains.get(args), eventTimeout.get(args));
+                long last = io.izzel.minecraftmcp.server.ServerEvents.last();
+                return event == null ? Map.of("matched", false, "last", last) : Map.of("matched", true, "event", event, "last", last);
+            })));
         Param<Integer> chunkX = Param.integer("chunkX", "chunk X (block X >> 4)").required();
         Param<Integer> chunkZ = Param.integer("chunkZ", "chunk Z (block Z >> 4)").required();
         registry.register(read(tool("mc.server.chunk.state", "Report whether a chunk is loaded and ticking", List.of(chunkX, chunkZ, DIMENSION),

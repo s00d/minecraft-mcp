@@ -71,6 +71,15 @@ public final class MinecraftCompat {
         *///?}
     }
 
+    /** The scoreboard tags of an entity (/tag); 26.1 renamed the getter. */
+    public static java.util.Set<String> tags(net.minecraft.world.entity.Entity entity) {
+        //? if >=26.1 {
+        /*return entity.entityTags();
+        *///?} else {
+        return entity.getTags();
+        //?}
+    }
+
     public static String profileName(Player player) {
         //? if >=1.21.9 {
         return player.getGameProfile().name();

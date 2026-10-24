@@ -46,6 +46,8 @@ public final class JsScript {
     private final long deadline;
     private final long maxCalls;
     private final Deque<String> log = new ArrayDeque<>();
+    /** The step(name, fn) calls so far, in order: a story test's beats. */
+    private final List<Map<String, Object>> steps = new ArrayList<>();
     private final Factory factory = new Factory();
     // set while a sync block runs on the game thread: it must not hold the game up for long
     private volatile long syncDeadline;
@@ -111,6 +113,9 @@ public final class JsScript {
         } finally {
             Context.exit();
             thread.setContextClassLoader(previous);
+        }
+        synchronized (steps) {
+            if (!steps.isEmpty()) report.put("steps", List.copyOf(steps));
         }
         report.put("calls", calls);
         report.put("elapsedMs", (System.nanoTime() - started) / 1_000_000);
@@ -364,6 +369,41 @@ public final class JsScript {
         };
         // the names models reach for; all of them add a line to the report's log
         put(scope, "log", print);
+        put(scope, "assert", (c, s, a) -> {
+            if (a.length == 0 || !Context.toBoolean(a[0])) {
+                throw new IllegalStateException("assertion failed" + (a.length > 1 ? ": " + Context.toString(a[1]) : ""));
+            }
+            return Undefined.instance;
+        });
+        // compared as JSON values, so objects and arrays compare by content and 1 equals 1.0
+        put(scope, "assertEquals", (c, s, a) -> {
+            Object actual = toJava(a.length > 0 ? a[0] : null), expected = toJava(a.length > 1 ? a[1] : null);
+            String left = io.izzel.minecraftmcp.json.Json.stringify(actual), right = io.izzel.minecraftmcp.json.Json.stringify(expected);
+            if (!left.equals(right)) {
+                throw new IllegalStateException((a.length > 2 ? Context.toString(a[2]) + ": " : "") + "expected " + right + " but was " + left);
+            }
+            return Undefined.instance;
+        });
+        put(scope, "step", (c, s, a) -> {
+            if (a.length < 2 || !(a[1] instanceof Function body)) throw new IllegalArgumentException("step(name, fn) needs a name and a function");
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", Context.toString(a[0]));
+            long started = System.nanoTime();
+            try {
+                Object value = body.call(c, s, s, new Object[0]);
+                entry.put("status", "passed");
+                return value;
+            } catch (RuntimeException e) {
+                entry.put("status", "failed");
+                entry.put("error", e instanceof RhinoException rhino ? message(rhino) : String.valueOf(e.getMessage()));
+                throw e;
+            } finally {
+                entry.put("ms", (System.nanoTime() - started) / 1_000_000);
+                synchronized (steps) {
+                    steps.add(entry);
+                }
+            }
+        });
         put(scope, "print", print);
         Scriptable console = cx.newObject(scope);
         for (String level : List.of("log", "info", "warn", "error", "debug")) ScriptableObject.putProperty(console, level, new Builtin(level, print));

@@ -146,6 +146,46 @@ public final class IntegratedServerBridge implements MinecraftServerBridge {
     }
 
     @Override
+    public Map<String, Object> entityPin(String who, Double x, Double y, Double z, Float yaw, Float pitch, long ticks) {
+        return require().entityPin(who, x, y, z, yaw, pitch, ticks);
+    }
+
+    @Override
+    public Map<String, Object> entityUnpin(String who) {
+        return require().entityUnpin(who);
+    }
+
+    @Override
+    public Map<String, Object> entityLook(String who, Double x, Double y, Double z, String at) {
+        return require().entityLook(who, x, y, z, at);
+    }
+
+    @Override
+    public io.izzel.minecraftmcp.mcp.FutureResult<Map<String, Object>> entityMove(String who, double x, double y, double z, double speed) {
+        return require().entityMove(who, x, y, z, speed);
+    }
+
+    @Override
+    public Map<String, Object> playerSave(String who, String name) {
+        return require().playerSave(who, name);
+    }
+
+    @Override
+    public Map<String, Object> playerRestore(String who, String name) {
+        return require().playerRestore(who, name);
+    }
+
+    @Override
+    public void watchEvents() {
+        require().watchEvents();
+    }
+
+    @Override
+    public Map<String, Object> playerSnapshots() {
+        return require().playerSnapshots();
+    }
+
+    @Override
     public void shutdownServer() {
         require().shutdownServer();
     }

@@ -101,6 +101,39 @@ public interface MinecraftServerBridge extends MinecraftBridge {
         throw new UnsupportedOperationException("Schematic paste is not implemented by " + loader());
     }
 
+    /** Holds a player or entity at a spot and rotation every tick (ticks 0: until unpin). */
+    default Map<String, Object> entityPin(String who, Double x, Double y, Double z, Float yaw, Float pitch, long ticks) {
+        throw new UnsupportedOperationException("Pinning is not implemented by " + loader());
+    }
+
+    default Map<String, Object> entityUnpin(String who) {
+        throw new UnsupportedOperationException("Pinning is not implemented by " + loader());
+    }
+
+    default Map<String, Object> entityLook(String who, Double x, Double y, Double z, String at) {
+        throw new UnsupportedOperationException("Turning entities is not implemented by " + loader());
+    }
+
+    default io.izzel.minecraftmcp.mcp.FutureResult<Map<String, Object>> entityMove(String who, double x, double y, double z, double speed) {
+        throw new UnsupportedOperationException("Moving entities is not implemented by " + loader());
+    }
+
+    default Map<String, Object> playerSave(String who, String name) {
+        throw new UnsupportedOperationException("Player snapshots are not implemented by " + loader());
+    }
+
+    default Map<String, Object> playerRestore(String who, String name) {
+        throw new UnsupportedOperationException("Player snapshots are not implemented by " + loader());
+    }
+
+    /** Makes sure the server's join/leave/dimension watch runs; the rest of the events come from the mixins. */
+    default void watchEvents() {
+    }
+
+    default Map<String, Object> playerSnapshots() {
+        throw new UnsupportedOperationException("Player snapshots are not implemented by " + loader());
+    }
+
     default void shutdownServer() {
         throw new UnsupportedOperationException("Server shutdown is not implemented by " + loader());
     }

@@ -65,10 +65,12 @@ public final class ScriptTools {
         for (let i = 0; i < 5; i++) { mc.client.mouse.hold({button: "left", ticks: 30}); mc.client.player.turn({yaw: 90}); }
         return {food: mc.client.player.state().food};""";
 
-    public static void register(ToolRegistry registry, MinecraftBridge bridge) {
+    public static void register(ToolRegistry registry, MinecraftBridge bridge, io.izzel.minecraftmcp.scenario.ScenarioEngine scenarios) {
         Map<String, Run> runs = new ConcurrentHashMap<>();
         AtomicLong ids = new AtomicLong();
         Path directory = bridge.gameDirectory().resolve("mcp").resolve("scripts");
+        // .js files in a scenario directory are scenarios: a script that fails by throwing (assert ...)
+        scenarios.scripts((code, name) -> new JsScript(registry, bridge, directory, 300_000, 100_000).run(code, name, Map.of()));
 
         Param<String> code = Param.string("code", "JavaScript, run as a function body; omit to run a saved script by name");
         Param<String> name = Param.string("name", "saved script name (mcp/scripts/<name>.js under the game directory)");

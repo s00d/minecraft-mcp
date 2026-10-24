@@ -16,6 +16,7 @@ public final class VanillaServerBridge implements MinecraftServerBridge {
     public VanillaServerBridge(MinecraftServer server, String loader) {
         this.server = server;
         this.loader = loader;
+        ServerEvents.watch(server);
     }
 
     public String loader() { return loader; }
@@ -47,6 +48,14 @@ public final class VanillaServerBridge implements MinecraftServerBridge {
     public Map<String, Object> blockAt(String dimension, int x, int y, int z) { return ServerWorldTools.blockAt(server, dimension, x, y, z); }
     public Map<String, Object> setBlock(String dimension, int x, int y, int z, String blockState) { return ServerWorldTools.setBlock(server, dimension, x, y, z, blockState); }
     public Map<String, Object> entityQuery(Map<String, Object> args) { return ServerWorldTools.entityQuery(server, args); }
+    public Map<String, Object> entityPin(String who, Double x, Double y, Double z, Float yaw, Float pitch, long ticks) { return StoryTools.pin(server, who, x, y, z, yaw, pitch, ticks); }
+    public Map<String, Object> entityUnpin(String who) { return StoryTools.unpin(server, who); }
+    public Map<String, Object> entityLook(String who, Double x, Double y, Double z, String at) { return StoryTools.look(server, who, x, y, z, at); }
+    public io.izzel.minecraftmcp.mcp.FutureResult<Map<String, Object>> entityMove(String who, double x, double y, double z, double speed) { return StoryTools.move(server, who, x, y, z, speed); }
+    public Map<String, Object> playerSave(String who, String name) { return StoryTools.savePlayer(server, who, name); }
+    public Map<String, Object> playerRestore(String who, String name) { return StoryTools.restorePlayer(server, who, name); }
+    public Map<String, Object> playerSnapshots() { return StoryTools.snapshots(); }
+    public void watchEvents() { ServerEvents.watch(server); }
     public Map<String, Object> chunkState(String dimension, int chunkX, int chunkZ) { return ServerWorldTools.chunkState(server, dimension, chunkX, chunkZ); }
     public Map<String, Object> tickStats() { return ServerWorldTools.tickStats(server); }
     public Map<String, Object> time(String dimension, Long set, Long add) { return ServerTime.time(server, dimension, set, add); }

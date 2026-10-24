@@ -25,6 +25,7 @@ import net.minecraft.world.phys.AABB;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 
@@ -180,12 +181,53 @@ public final class ServerWorldTools {
     private static final Param<Map<String, Object>> QUERY_TO = Param.object("to", "opposite box corner {x,y,z}");
     private static final Param<String> QUERY_TYPE = Param.string("type", "only this entity type id, e.g. minecraft:zombie");
     private static final Param<Integer> QUERY_LIMIT = Param.integer("limit", "max entities returned").or(100);
-    public static final List<Param<?>> ENTITY_QUERY_PARAMS = List.of(QUERY_FROM, QUERY_TO, QUERY_TYPE, QUERY_LIMIT, DIMENSION);
+    private static final Param<String> QUERY_TAG = Param.string("tag", "only entities with this scoreboard tag (/tag, Tags:[...] in /summon)");
+    private static final Param<String> QUERY_NAME = Param.string("name", "only entities with this custom name (or player name)");
+    private static final Param<String> QUERY_UUID = Param.string("uuid", "only this entity");
+    public static final List<Param<?>> ENTITY_QUERY_PARAMS = List.of(QUERY_FROM, QUERY_TO, QUERY_TYPE, QUERY_TAG, QUERY_NAME, QUERY_UUID, QUERY_LIMIT, DIMENSION);
+
+    /** What a test wants to know about an entity: identity, place, state and what it is doing. */
+    public static Map<String, Object> describe(Entity entity) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("type", EntityType.getKey(entity.getType()).toString());
+        entry.put("uuid", entity.getUUID().toString());
+        entry.put("id", entity.getId());
+        entry.put("name", entity.getName().getString());
+        if (entity.hasCustomName()) entry.put("customName", entity.getCustomName().getString());
+        entry.put("x", entity.getX());
+        entry.put("y", entity.getY());
+        entry.put("z", entity.getZ());
+        entry.put("yaw", entity.getYRot());
+        entry.put("pitch", entity.getXRot());
+        var motion = entity.getDeltaMovement();
+        entry.put("velocity", List.of(motion.x, motion.y, motion.z));
+        entry.put("alive", entity.isAlive());
+        Set<String> tags = MinecraftCompat.tags(entity);
+        if (!tags.isEmpty()) entry.put("tags", List.copyOf(tags));
+        if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
+            entry.put("health", living.getHealth());
+            entry.put("maxHealth", living.getMaxHealth());
+            if (!living.getMainHandItem().isEmpty()) entry.put("mainHand", BuiltInRegistries.ITEM.getKey(living.getMainHandItem().getItem()).toString());
+            if (!living.getOffhandItem().isEmpty()) entry.put("offHand", BuiltInRegistries.ITEM.getKey(living.getOffhandItem().getItem()).toString());
+        }
+        if (entity instanceof net.minecraft.world.entity.Mob mob) {
+            entry.put("noAi", mob.isNoAi());
+            if (mob.getTarget() != null) entry.put("target", mob.getTarget().getUUID().toString());
+            entry.put("navigating", !mob.getNavigation().isDone());
+        }
+        if (StoryTools.pinned(entity.getUUID())) entry.put("pinned", true);
+        if (entity.isInvulnerable()) entry.put("invulnerable", true);
+        if (entity.isNoGravity()) entry.put("noGravity", true);
+        if (entity.getVehicle() != null) entry.put("vehicle", entity.getVehicle().getUUID().toString());
+        if (!entity.getPassengers().isEmpty()) entry.put("passengers", entity.getPassengers().stream().map(e -> e.getUUID().toString()).toList());
+        return entry;
+    }
 
     public static Map<String, Object> entityQuery(MinecraftServer server, Map<String, Object> args) {
         ServerLevel level = level(server, DIMENSION.get(args));
         int limit = Math.max(1, QUERY_LIMIT.get(args));
         String typeFilter = QUERY_TYPE.get(args);
+        String tagFilter = QUERY_TAG.get(args), nameFilter = QUERY_NAME.get(args), uuidFilter = QUERY_UUID.get(args);
 
         Iterable<? extends Entity> found;
         Map<String, Object> from = QUERY_FROM.get(args), to = QUERY_TO.get(args);
@@ -205,19 +247,14 @@ public final class ServerWorldTools {
             if (typeFilter != null && !typeFilter.equals(type)) {
                 continue;
             }
+            if (tagFilter != null && !MinecraftCompat.tags(entity).contains(tagFilter)) continue;
+            if (nameFilter != null && !nameFilter.equals(entity.getName().getString())) continue;
+            if (uuidFilter != null && !uuidFilter.equalsIgnoreCase(entity.getUUID().toString())) continue;
             total++;
             if (entities.size() >= limit) {
                 continue;
             }
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("type", type);
-            entry.put("uuid", entity.getUUID().toString());
-            entry.put("name", entity.getName().getString());
-            entry.put("x", entity.getX());
-            entry.put("y", entity.getY());
-            entry.put("z", entity.getZ());
-            entry.put("alive", entity.isAlive());
-            entities.add(entry);
+            entities.add(describe(entity));
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("dimension", MinecraftCompat.id(level.dimension()));

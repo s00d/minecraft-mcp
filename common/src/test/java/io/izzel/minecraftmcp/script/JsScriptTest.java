@@ -123,6 +123,36 @@ class JsScriptTest {
     }
 
     @Test
+    void assertionsAndStepsReportWhereAStoryFailed() throws Exception {
+        Map<String, Object> report = run("""
+            step("arrive", () => assertEquals({a: [1, 2]}, {a: [1, 2.0]}));
+            step("talk", () => assert(mc.client.player.state().food > 30, "the guide is not fed"));
+            step("never", () => 1);""");
+        assertEquals(false, report.get("ok"));
+        assertTrue(String.valueOf(report.get("error")).contains("assertion failed: the guide is not fed"), String.valueOf(report));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) report.get("steps");
+        assertEquals(List.of("arrive", "talk"), steps.stream().map(s -> s.get("name")).toList());
+        assertEquals(List.of("passed", "failed"), steps.stream().map(s -> s.get("status")).toList());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void javascriptFilesRunAsScenarios() throws Exception {
+        java.nio.file.Path dir = gameDirectory.resolve("story");
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Files.writeString(dir.resolve("a_pass.js"), "// @name greeting\n// @tags story\nstep('hello', () => assert(true));");
+        java.nio.file.Files.writeString(dir.resolve("b_fail.js"), "// @tags story\nassertEquals(1, 2, 'counted');");
+        java.nio.file.Files.writeString(dir.resolve("c_server.js"), "// @sides server\nassert(false);");
+        Map<String, Object> report = (Map<String, Object>) registry.call("mc.scenario.batch.run", Map.of("directory", dir.toString()));
+        List<Map<String, Object>> scenarios = (List<Map<String, Object>>) report.get("scenarios");
+        assertEquals(List.of("greeting", "b_fail.js", "c_server.js"), scenarios.stream().map(s -> s.get("name")).toList());
+        assertEquals(List.of("passed", "failed", "skipped"), scenarios.stream().map(s -> s.get("status")).toList());
+        assertEquals("counted: expected 2 but was 1", scenarios.get(1).get("error"));
+        assertEquals(1, ((List<?>) scenarios.get(0).get("steps")).size());
+    }
+
+    @Test
     void syntaxErrorsReportTheLine() throws Exception {
         Map<String, Object> report = run("const a = 1;\nconst b = ;");
         assertEquals(false, report.get("ok"));
