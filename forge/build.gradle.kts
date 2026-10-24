@@ -64,3 +64,8 @@ tasks.named<ProcessResources>("processResources") {
     inputs.properties(templateValues)
     filesMatching(listOf("META-INF/mods.toml", "pack.mcmeta")) { expand(templateValues) }
 }
+
+// Forge reads mixin configs from the jar manifest.
+tasks.named<Jar>("jar") {
+    manifest.attributes("MixinConfigs" to "minecraft_mcp.mixins.json")
+}

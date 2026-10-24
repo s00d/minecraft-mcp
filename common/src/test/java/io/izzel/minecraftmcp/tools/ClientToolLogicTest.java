@@ -290,7 +290,7 @@ class ClientToolLogicTest {
         IllegalArgumentException bad = assertThrows(IllegalArgumentException.class,
             () -> registry.call("mc.client.player.swing", Map.of("hand", "left")));
         assertTrue(bad.getMessage().contains("[main, offhand]"), bad.getMessage());
-        assertThrows(IllegalArgumentException.class, () -> registry.call("mc.client.container.click", Map.of("slot", 0, "clickType", "SWAP")));
+        assertThrows(IllegalArgumentException.class, () -> registry.call("mc.client.container.click", Map.of("slot", 0, "clickType", "DRAG")));
         assertEquals(6, bridge.calls.size(), "a refused argument never reaches the bridge");
     }
 

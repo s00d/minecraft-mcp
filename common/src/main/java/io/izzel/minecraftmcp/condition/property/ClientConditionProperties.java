@@ -34,6 +34,9 @@ public final class ClientConditionProperties implements ConditionPropertyProvide
         snapshot(registry, "vehicle", MinecraftClientBridge::vehicleState);
         snapshot(registry, "world", MinecraftClientBridge::worldSnapshot);
         snapshot(registry, "inventory", MinecraftClientBridge::inventorySnapshot);
+        snapshot(registry, "player", MinecraftClientBridge::playerState);
+        snapshot(registry, "target", MinecraftClientBridge::crosshairTarget);
+        snapshot(registry, "mouse", MinecraftClientBridge::mouseState);
         registry.registerContextProperty("packet", ctx ->
             ctx.cached("packet", () -> client(ctx).packetRecordingStatus())
         );

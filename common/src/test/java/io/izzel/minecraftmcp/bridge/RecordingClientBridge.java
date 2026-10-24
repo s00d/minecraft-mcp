@@ -60,6 +60,16 @@ public class RecordingClientBridge extends FakeClientBridge {
     @Override public Map<String, Object> typeText(String text, boolean submit) { return record("typeText", text, submit); }
     @Override public Map<String, Object> clickScreen(double x, double y, int button) { return record("clickScreen", x, y, button); }
     @Override public Map<String, Object> clickWidget(String id, String message, int button) { return record("clickWidget", id, message, button); }
+    @Override public Map<String, Object> mouseClick(String button, Double x, Double y) { return record("mouseClick", button, x, y); }
+    @Override public FutureResult<Map<String, Object>> mouseHold(String button, long ticks, Double x, Double y) { return action("mouseHold", button, ticks, x, y); }
+    @Override public Map<String, Object> mouseMove(double x, double y) { return record("mouseMove", x, y); }
+    @Override public Map<String, Object> mouseScroll(double amount, Double x, Double y) { return record("mouseScroll", amount, x, y); }
+    @Override public Map<String, Object> mouseState() { return record("mouseState"); }
+    @Override public Map<String, Object> playerState() { return record("playerState"); }
+    @Override public Map<String, Object> attackEntity(int id) { return record("attackEntity", id); }
+    @Override public Map<String, Object> interactEntity(int id, String hand) { return record("interactEntity", id, hand); }
+    @Override public Map<String, Object> respawn() { return record("respawn"); }
+    @Override public FutureResult<Map<String, Object>> turn(float yaw, float pitch) { return action("turn", yaw, pitch); }
     @Override public Map<String, Object> disconnectState() {
         record("disconnectState");
         return Map.of("disconnected", true, "message", "Disconnected");
@@ -75,6 +85,7 @@ public class RecordingClientBridge extends FakeClientBridge {
     @Override public Map<String, Object> selectedInventoryItem() { return record("selectedInventoryItem"); }
     @Override public Map<String, Object> containerState() { return record("containerState"); }
     @Override public Map<String, Object> clickContainer(int slot, int button, String clickType) { return record("clickContainer", slot, button, clickType); }
+    @Override public Map<String, Object> equipItem(String item, String hand) { return record("equipItem", item, hand); }
     @Override public Map<String, Object> closeContainer() { return record("closeContainer"); }
     @Override public Map<String, Object> selectHotbarSlot(int slot) { return record("selectHotbarSlot", slot); }
     @Override public Map<String, Object> blockAt(int x, int y, int z) { return record("blockAt", x, y, z); }

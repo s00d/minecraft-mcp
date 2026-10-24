@@ -7,6 +7,7 @@ import io.izzel.minecraftmcp.compat.ClientCompat;
 import io.izzel.minecraftmcp.compat.ClientQueries;
 import io.izzel.minecraftmcp.compat.MinecraftCompat;
 import io.izzel.minecraftmcp.config.McpConfigs;
+import io.izzel.minecraftmcp.input.AttackOverride;
 import io.izzel.minecraftmcp.input.KeyAliases;
 import io.izzel.minecraftmcp.mcp.FutureResult;
 import io.izzel.minecraftmcp.packet.CommandSuggestionSync;
@@ -196,30 +197,33 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
         BlockPos pos = new BlockPos(x, y, z);
         long startedAt = System.currentTimeMillis();
         int[] attempts = {0};
-        // One destroy step per client tick, the way holding the attack button does it.
+        // One destroy step per client tick, the way holding the attack button does it. Vanilla's own
+        // continueAttack would abort the break every tick while the mouse is not grabbed, so it is skipped meanwhile.
         TickCounter.CLIENT.eachTick(() -> {
-            if (result.isCancelled()) {
-                if (mc.gameMode != null) mc.gameMode.stopDestroyBlock();
-                return true;
-            }
+            boolean done = true;
             try {
-                if (mc.player == null || mc.level == null || mc.gameMode == null) {
+                if (result.isCancelled()) {
+                    if (mc.gameMode != null) mc.gameMode.stopDestroyBlock();
+                } else if (mc.player == null || mc.level == null || mc.gameMode == null) {
                     result.complete(Map.of("status", "not_in_world", "x", x, "y", y, "z", z));
-                    return true;
-                }
-                if (mc.level.getBlockState(pos).isAir()) {
+                } else if (mc.level.getBlockState(pos).isAir()) {
                     result.complete(Map.of("status", "destroyed", "x", x, "y", y, "z", z, "face", direction.getName(),
                         "attempts", attempts[0], "elapsedMs", System.currentTimeMillis() - startedAt));
-                    return true;
+                } else {
+                    if (attempts[0]++ == 0) {
+                        AttackOverride.acquire();
+                        mc.gameMode.startDestroyBlock(pos, direction);
+                    } else {
+                        mc.gameMode.continueDestroyBlock(pos, direction);
+                    }
+                    ClientCompat.swing(mc, InteractionHand.MAIN_HAND);
+                    done = false;
                 }
-                if (attempts[0]++ == 0) mc.gameMode.startDestroyBlock(pos, direction);
-                mc.gameMode.continueDestroyBlock(pos, direction);
-                ClientCompat.swing(mc, InteractionHand.MAIN_HAND);
-                return false;
             } catch (RuntimeException e) {
                 result.completeExceptionally(e);
-                return true;
             }
+            if (done && attempts[0] > 0) AttackOverride.release();
+            return done;
         });
         return result;
     }
@@ -411,6 +415,282 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
         }
         return Map.of("status", "not_found", "id", wantedId, "message", wantedMessage, "screen", screen.getClass().getName());
     }
+
+    // --- mouse
+
+    // The cursor set by mouse.move; it counts on the screen it was set on, after that the real cursor does again.
+    private Screen cursorScreen;
+    private double cursorX;
+    private double cursorY;
+
+    private double[] cursorOn(Screen screen, Double x, Double y) {
+        if (x != null && y != null) return new double[] {x, y};
+        if (screen != null && screen == cursorScreen) return new double[] {cursorX, cursorY};
+        return ClientCompat.cursor(mc);
+    }
+    private static int buttonIndex(String button) {
+        return switch (button == null ? "left" : button) {
+            case "right" -> 1;
+            case "middle" -> 2;
+            default -> 0;
+        };
+    }
+    private KeyMapping buttonMapping(String button) {
+        return switch (buttonIndex(button)) {
+            case 1 -> mc.options.keyUse;
+            case 2 -> mc.options.keyPickItem;
+            default -> mc.options.keyAttack;
+        };
+    }
+    private static void click(KeyMapping mapping) {
+        KeyMapping.click(InputConstants.getKey(mapping.saveString()));
+    }
+    public Map<String, Object> mouseClick(String button, Double x, Double y) {
+        Screen screen = ClientCompat.screen(mc);
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("button", button);
+        if (screen != null) {
+            double[] at = cursorOn(screen, x, y);
+            int index = buttonIndex(button);
+            boolean handled = ClientCompat.mouseClicked(screen, at[0], at[1], index);
+            // released on the screen that got the press, even when the click closed it
+            ClientCompat.mouseReleased(screen, at[0], at[1], index);
+            result.put("status", "clicked");
+            result.put("where", "screen");
+            result.put("x", at[0]);
+            result.put("y", at[1]);
+            result.put("handled", handled);
+            result.put("screen", screen.getClass().getName());
+            return result;
+        }
+        if (mc.player == null) {
+            result.put("status", "not_in_world");
+            return result;
+        }
+        // the game's own click: attack / use / pick block on the crosshair target, handled on the next tick
+        result.put("target", ClientQueries.target(mc));
+        click(buttonMapping(button));
+        result.put("status", "clicked");
+        result.put("where", "world");
+        return result;
+    }
+    public FutureResult<Map<String, Object>> mouseHold(String button, long ticks, Double x, Double y) {
+        FutureResult<Map<String, Object>> result = new FutureResult<>(this::execute);
+        long total = Math.max(1, ticks);
+        int index = buttonIndex(button);
+        KeyMapping mapping = buttonMapping(button);
+        long[] held = {-1};
+        Screen[] pressedOn = {null};
+        double[] at = {0, 0};
+        TickCounter.CLIENT.eachTick(() -> {
+            try {
+                if (held[0] < 0) {
+                    held[0] = 0;
+                    Screen screen = ClientCompat.screen(mc);
+                    if (screen != null) {
+                        double[] cursor = cursorOn(screen, x, y);
+                        at[0] = cursor[0];
+                        at[1] = cursor[1];
+                        pressedOn[0] = screen;
+                        ClientCompat.mouseClicked(screen, at[0], at[1], index);
+                    } else if (mc.player == null || mc.gameMode == null) {
+                        result.complete(Map.of("status", "not_in_world", "button", button));
+                        return true;
+                    } else {
+                        mapping.setDown(true);
+                        click(mapping);
+                        if (index == 0) AttackOverride.acquire();
+                    }
+                    return false;
+                }
+                boolean done = result.isCancelled() || ++held[0] >= total || (pressedOn[0] == null && mc.player == null);
+                if (pressedOn[0] == null && index == 0 && mc.player != null && mc.gameMode != null) {
+                    if (done) mc.gameMode.stopDestroyBlock();
+                    else continueAttack();
+                }
+                if (!done) return false;
+                java.util.Map<String, Object> report = new java.util.LinkedHashMap<>();
+                report.put("status", "held");
+                report.put("button", button);
+                report.put("ticks", held[0]);
+                if (pressedOn[0] != null) {
+                    ClientCompat.mouseReleased(pressedOn[0], at[0], at[1], index);
+                    report.put("where", "screen");
+                    report.put("x", at[0]);
+                    report.put("y", at[1]);
+                } else {
+                    mapping.setDown(false);
+                    if (index == 0) AttackOverride.release();
+                    report.put("where", "world");
+                    report.put("target", ClientQueries.target(mc));
+                }
+                result.complete(report);
+                return true;
+            } catch (RuntimeException e) {
+                if (pressedOn[0] == null && held[0] >= 0) {
+                    mapping.setDown(false);
+                    if (index == 0) AttackOverride.release();
+                }
+                result.completeExceptionally(e);
+                return true;
+            }
+        });
+        return result;
+    }
+    /** Vanilla's continueAttack(true), minus the mouse grab check: keeps breaking the crosshair block. */
+    private void continueAttack() {
+        if (mc.player.isUsingItem()) return;
+        if (mc.hitResult instanceof BlockHitResult hit && mc.hitResult.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
+                && !mc.level.getBlockState(hit.getBlockPos()).isAir()) {
+            if (mc.gameMode.continueDestroyBlock(hit.getBlockPos(), hit.getDirection())) ClientCompat.swing(mc, InteractionHand.MAIN_HAND);
+        } else {
+            mc.gameMode.stopDestroyBlock();
+        }
+    }
+    public Map<String, Object> mouseMove(double x, double y) {
+        Screen screen = ClientCompat.screen(mc);
+        if (screen == null) return Map.of("status", "no_screen", "x", x, "y", y);
+        cursorScreen = screen;
+        cursorX = x;
+        cursorY = y;
+        screen.mouseMoved(x, y);
+        return Map.of("status", "moved", "x", x, "y", y, "screen", screen.getClass().getName());
+    }
+    public Map<String, Object> mouseScroll(double amount, Double x, Double y) {
+        Screen screen = ClientCompat.screen(mc);
+        if (screen != null) {
+            double[] at = cursorOn(screen, x, y);
+            boolean handled = screen.mouseScrolled(at[0], at[1], 0, amount);
+            return Map.of("status", "scrolled", "where", "screen", "amount", amount, "x", at[0], "y", at[1], "handled", handled);
+        }
+        if (mc.player == null) return Map.of("status", "not_in_world", "amount", amount);
+        // the wheel in the world walks the hotbar: up selects the previous slot
+        Inventory inventory = mc.player.getInventory();
+        int slot = Math.floorMod(MinecraftCompat.selectedSlot(inventory) - (int) Math.signum(amount), Inventory.getSelectionSize());
+        MinecraftCompat.selectSlot(inventory, slot);
+        return Map.of("status", "scrolled", "where", "world", "amount", amount, "slot", slot, "item", stackMap(slot, inventory.getItem(slot)));
+    }
+    public Map<String, Object> mouseState() {
+        Screen screen = ClientCompat.screen(mc);
+        double[] real = ClientCompat.cursor(mc);
+        double[] used = cursorOn(screen, null, null);
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("x", used[0]);
+        result.put("y", used[1]);
+        result.put("source", screen != null && screen == cursorScreen ? "mouse.move" : "cursor");
+        result.put("cursorX", real[0]);
+        result.put("cursorY", real[1]);
+        result.put("screen", screen == null ? null : screen.getClass().getName());
+        result.put("grabbed", mc.mouseHandler.isMouseGrabbed());
+        result.put("windowActive", mc.isWindowActive());
+        result.put("left", mc.options.keyAttack.isDown());
+        result.put("right", mc.options.keyUse.isDown());
+        return result;
+    }
+
+    // --- player and entities
+
+    public Map<String, Object> playerState() {
+        var player = mc.player;
+        if (player == null) return Map.of("inWorld", false);
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("inWorld", true);
+        result.put("name", MinecraftCompat.profileName(player));
+        result.put("dimension", MinecraftCompat.id(mc.level.dimension()));
+        result.put("gameMode", mc.gameMode == null ? null : mc.gameMode.getPlayerMode().getName());
+        result.put("x", player.getX());
+        result.put("y", player.getY());
+        result.put("z", player.getZ());
+        result.put("yaw", player.getYRot());
+        result.put("pitch", player.getXRot());
+        result.put("health", player.getHealth());
+        result.put("maxHealth", player.getMaxHealth());
+        result.put("absorption", player.getAbsorptionAmount());
+        result.put("armor", player.getArmorValue());
+        result.put("food", player.getFoodData().getFoodLevel());
+        result.put("saturation", player.getFoodData().getSaturationLevel());
+        result.put("air", player.getAirSupply());
+        result.put("maxAir", player.getMaxAirSupply());
+        result.put("xpLevel", player.experienceLevel);
+        result.put("xpProgress", player.experienceProgress);
+        result.put("totalXp", player.totalExperience);
+        result.put("dead", player.isDeadOrDying());
+        result.put("onGround", player.onGround());
+        result.put("inWater", player.isInWater());
+        result.put("inLava", player.isInLava());
+        result.put("onFire", player.isOnFire());
+        result.put("sprinting", player.isSprinting());
+        result.put("sneaking", player.isShiftKeyDown());
+        result.put("usingItem", player.isUsingItem());
+        result.put("passenger", player.isPassenger());
+        result.put("selected", MinecraftCompat.selectedSlot(player.getInventory()));
+        result.put("mainHand", stackSummary(player.getMainHandItem()));
+        result.put("offHand", stackSummary(player.getOffhandItem()));
+        java.util.List<Map<String, Object>> effects = new java.util.ArrayList<>();
+        for (var effect : player.getActiveEffects()) {
+            effects.add(Map.of("id", effect.getEffect().unwrapKey().map(MinecraftCompat::id).orElse("unknown"),
+                "amplifier", effect.getAmplifier(), "duration", effect.getDuration()));
+        }
+        result.put("effects", effects);
+        return result;
+    }
+    private void face(double x, double y, double z) {
+        Vec3 eye = mc.player.getEyePosition();
+        double dx = x - eye.x;
+        double dy = y - eye.y;
+        double dz = z - eye.z;
+        float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0D);
+        float pitch = Math.max(-90.0F, Math.min(90.0F, (float) (-Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))))));
+        mc.player.setYRot(yaw);
+        mc.player.setXRot(pitch);
+        mc.player.yHeadRot = yaw;
+        mc.player.yBodyRot = yaw;
+    }
+    private Entity entityById(int id) {
+        return mc.level == null ? null : mc.level.getEntity(id);
+    }
+    public Map<String, Object> attackEntity(int id) {
+        if (mc.player == null || mc.gameMode == null) return Map.of("status", "not_in_world", "id", id);
+        Entity entity = entityById(id);
+        if (entity == null || entity == mc.player) return Map.of("status", "not_found", "id", id);
+        face(entity.getX(), entity.getY() + entity.getBbHeight() / 2, entity.getZ());
+        mc.gameMode.attack(mc.player, entity);
+        ClientCompat.swing(mc, InteractionHand.MAIN_HAND);
+        return Map.of("status", "attacked", "id", id, "type", net.minecraft.world.entity.EntityType.getKey(entity.getType()).toString(),
+            "distance", entity.distanceTo(mc.player));
+    }
+    public Map<String, Object> interactEntity(int id, String hand) {
+        if (mc.player == null || mc.gameMode == null) return Map.of("status", "not_in_world", "id", id);
+        Entity entity = entityById(id);
+        if (entity == null || entity == mc.player) return Map.of("status", "not_found", "id", id);
+        Vec3 center = entity.position().add(0, entity.getBbHeight() / 2, 0);
+        face(center.x, center.y, center.z);
+        InteractionHand interactionHand = hand(hand);
+        var result = ClientCompat.interactEntity(mc, entity, new net.minecraft.world.phys.EntityHitResult(entity, center), interactionHand);
+        if (result.consumesAction()) ClientCompat.swing(mc, interactionHand);
+        return Map.of("status", "interacted", "id", id, "type", net.minecraft.world.entity.EntityType.getKey(entity.getType()).toString(),
+            "result", result.toString(), "consumesAction", result.consumesAction(), "distance", entity.distanceTo(mc.player));
+    }
+    public Map<String, Object> respawn() {
+        if (mc.player == null) return Map.of("status", "not_in_world");
+        if (!mc.player.isDeadOrDying()) return Map.of("status", "alive");
+        mc.player.respawn();
+        ClientCompat.setScreen(mc, null);
+        return Map.of("status", "respawning");
+    }
+    public FutureResult<Map<String, Object>> turn(float yaw, float pitch) {
+        return action(() -> {
+            if (mc.player == null) return Map.of("status", "not_in_world");
+            float newYaw = mc.player.getYRot() + yaw;
+            float newPitch = Math.max(-90.0F, Math.min(90.0F, mc.player.getXRot() + pitch));
+            mc.player.setYRot(newYaw);
+            mc.player.setXRot(newPitch);
+            mc.player.yHeadRot = newYaw;
+            mc.player.yBodyRot = newYaw;
+            return Map.of("status", "turned", "yaw", newYaw, "pitch", newPitch);
+        });
+    }
+
     public Map<String, Object> disconnectState() {
         Screen screen = ClientCompat.screen(mc);
         java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
@@ -543,6 +823,34 @@ public abstract class VanillaClientBridge implements MinecraftClientBridge {
         if (slot >= menu.slots.size()) return Map.of("status", "rejected", "reason", "slot out of range", "slot", slot, "button", button, "clickType", clickType, "containerId", menu.containerId);
         ClientCompat.clickSlot(mc, menu.containerId, slot, button, clickType);
         return Map.of("status", "clicked", "slot", slot, "button", button, "clickType", clickType, "containerId", menu.containerId);
+    }
+    public Map<String, Object> equipItem(String item, String hand) {
+        if (mc.player == null || mc.gameMode == null) return Map.of("status", "not_in_world", "item", item);
+        Inventory inventory = mc.player.getInventory();
+        boolean offhand = "offhand".equals(hand);
+        ItemStack held = offhand ? mc.player.getOffhandItem() : MinecraftCompat.selectedItem(inventory);
+        if (!held.isEmpty() && net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString().equals(item)) {
+            return Map.of("status", "already_held", "item", item, "hand", offhand ? "offhand" : "main");
+        }
+        java.util.List<ItemStack> items = MinecraftCompat.inventoryItems(inventory);
+        int found = -1;
+        for (int i = 0; i < items.size() && found < 0; i++) {
+            if (!items.get(i).isEmpty() && net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(items.get(i).getItem()).toString().equals(item)) found = i;
+        }
+        if (found < 0) return Map.of("status", "not_found", "item", item);
+        int hotbar = Inventory.getSelectionSize();
+        if (!offhand && found < hotbar) {
+            MinecraftCompat.selectSlot(inventory, found);
+            return Map.of("status", "selected", "item", item, "slot", found);
+        }
+        if (mc.player.containerMenu != mc.player.inventoryMenu) {
+            return Map.of("status", "rejected", "reason", "close the open container first", "item", item);
+        }
+        // the inventory menu lists the main inventory at its own indexes and the hotbar at 36-44; SWAP button 40 is the offhand
+        int menuSlot = found < hotbar ? 36 + found : found;
+        int button = offhand ? 40 : MinecraftCompat.selectedSlot(inventory);
+        ClientCompat.clickSlot(mc, mc.player.inventoryMenu.containerId, menuSlot, button, "SWAP");
+        return Map.of("status", "swapped", "item", item, "from", found, "hand", offhand ? "offhand" : "main", "slot", button);
     }
     public Map<String, Object> closeContainer() {
         if (mc.player == null) return Map.of("status", "not_in_world");

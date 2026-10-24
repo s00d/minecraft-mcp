@@ -209,7 +209,8 @@ public final class JsonRpcHandler {
             Thread.currentThread().interrupt();
             String message = e.getMessage() == null ? e.getClass().getName() : e.getMessage();
             return content(message, true);
-        } catch (Exception e) {
+        } catch (Exception | LinkageError | StackOverflowError | AssertionError e) {
+            // an Error from a tool is that tool's failure too; thrown on, it would kill the worker and drop the connection
             String message = e.getMessage() == null ? e.getClass().getName() : e.getMessage();
             return content(message, true);
         }

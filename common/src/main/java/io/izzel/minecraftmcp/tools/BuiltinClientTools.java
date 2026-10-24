@@ -84,6 +84,58 @@ public final class BuiltinClientTools {
                 result.put("image", Map.of("mimeType", "image/png", "data", png.base64()));
                 return result;
             })));
+        Param<Integer> columns = Param.integer("columns", "pictures per row, 1-16").or(3);
+        Param<Integer> rows = Param.integer("rows", "rows, 1-16").or(3);
+        Param<List<?>> sheetNames = Param.array("names", "screenshot files under screenshots/, in sheet order; default: the newest ones");
+        Param<String> sheetPrefix = Param.string("prefix", "without names: only files starting with this").or("mcp-");
+        Param<Integer> cellWidth = Param.integer("cellWidth", "width of one cell in pixels").or(320);
+        Param<Integer> cellHeight = Param.integer("cellHeight", "height of one cell (0 = the first picture's aspect)").or(0);
+        Param<Integer> gap = Param.integer("gap", "pixels between cells").or(2);
+        registry.register(read(tool("mc.client.screenshot.grid", "Put saved screenshots on one contact sheet (columns x rows, row by row, "
+            + "oldest first), each scaled into its cell; missing pictures leave empty cells. Saves it under screenshots/ and "
+            + "returns it inline. Take the shots first with screenshot.take (one per step of a script, say)",
+            List.of(columns, rows, sheetNames, sheetPrefix, cellWidth, cellHeight, gap), args -> {
+                int cols = Math.max(1, Math.min(16, columns.get(args)));
+                int rowCount = Math.max(1, Math.min(16, rows.get(args)));
+                int width = Math.max(16, cellWidth.get(args));
+                if (cols * width > 8192) throw new IllegalArgumentException("sheet wider than 8192 pixels; lower cellWidth or columns");
+                java.nio.file.Path dir = bridge.gameDirectory().resolve("screenshots");
+                List<java.nio.file.Path> files = new ArrayList<>();
+                if (sheetNames.get(args) != null && !sheetNames.get(args).isEmpty()) {
+                    for (Object entry : sheetNames.get(args)) {
+                        String file = java.nio.file.Path.of(String.valueOf(entry)).getFileName().toString();
+                        java.nio.file.Path path = dir.resolve(file.endsWith(".png") ? file : file + ".png");
+                        if (!java.nio.file.Files.isRegularFile(path)) throw new IllegalArgumentException("no screenshot " + path.getFileName());
+                        files.add(path);
+                    }
+                } else if (java.nio.file.Files.isDirectory(dir)) {
+                    String prefix = sheetPrefix.get(args);
+                    try (var listing = java.nio.file.Files.list(dir)) {
+                        List<java.nio.file.Path> all = listing.filter(f -> {
+                            String file = f.getFileName().toString();
+                            return file.endsWith(".png") && file.startsWith(prefix) && !file.startsWith("grid-");
+                        }).sorted(java.util.Comparator.comparing((java.nio.file.Path f) -> f.toFile().lastModified())
+                            .thenComparing(f -> f.getFileName().toString())).toList();
+                        files.addAll(all.subList(Math.max(0, all.size() - cols * rowCount), all.size()));
+                    }
+                }
+                if (files.isEmpty()) throw new IllegalArgumentException("no screenshots in " + dir + "; take some with mc.client.screenshot.take");
+                Images.Sheet sheet = Images.grid(files, cols, rowCount, width, Math.max(0, cellHeight.get(args)), Math.max(0, gap.get(args)));
+                java.nio.file.Files.createDirectories(dir);
+                java.nio.file.Path out = dir.resolve("grid-" + java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
+                    .format(java.time.LocalDateTime.now()) + ".png");
+                java.nio.file.Files.write(out, sheet.png());
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("path", bridge.gameDirectory().relativize(out).toString().replace('\\', '/'));
+                result.put("width", sheet.width());
+                result.put("height", sheet.height());
+                result.put("cellWidth", sheet.cellWidth());
+                result.put("cellHeight", sheet.cellHeight());
+                result.put("cells", files.stream().map(f -> f.getFileName().toString()).toList());
+                result.put("empty", cols * rowCount - files.size());
+                result.put("image", Map.of("mimeType", "image/png", "data", java.util.Base64.getEncoder().encodeToString(sheet.png())));
+                return result;
+            })));
 
         registry.register(read(tool("mc.client.log.tail", "Return the tail of the client log, optionally only lines containing some text",
             List.of(LogTail.LINES, LogTail.CONTAINS), args -> LogTail.read(bridge.gameDirectory(), args))));
@@ -131,6 +183,34 @@ public final class BuiltinClientTools {
             }
             return Map.of("status", "held", "key", key, "ticks", ticks);
         }));
+        Param<String> mouseButton = Param.oneOf("button", "mouse button", "left", "right", "middle").or("left");
+        Param<Double> atX = Param.number("x", "screen only: GUI x to use instead of the cursor");
+        Param<Double> atY = Param.number("y", "screen only: GUI y to use instead of the cursor");
+        registry.register(tool("mc.client.mouse.click", "Click a mouse button at the current cursor. On a screen: press and release "
+            + "at the cursor (or x/y). In the world: the game's own click on the crosshair target - left attacks the entity or "
+            + "starts breaking the block, right uses the item / places / opens, middle picks the block", List.of(mouseButton, atX, atY), args -> {
+            String button = mouseButton.get(args);
+            Map<String, Object> result = bridge.submit(() -> bridge.mouseClick(button, atX.get(args), atY.get(args))).get(10, TimeUnit.SECONDS);
+            // the game handles a world click on its next tick; return once it did
+            if ("world".equals(result.get("where"))) bridge.waitTicks(1);
+            return result;
+        }));
+        registry.register(tool("mc.client.mouse.hold", "Hold a mouse button for some ticks, then release it. In the world left keeps "
+            + "breaking the crosshair block (works with an unfocused window), right keeps using the item (eat, draw a bow); on a "
+            + "screen it presses at the cursor and releases after the ticks", List.of(mouseButton, TICKS, atX, atY, TIMEOUT),
+            args -> bridge.mouseHold(mouseButton.get(args), TICKS.get(args), atX.get(args), atY.get(args))));
+        Param<Double> moveX = Param.number("x", "GUI x (scaled screen coordinates, see screen.state)").required();
+        Param<Double> moveY = Param.number("y", "GUI y").required();
+        registry.register(tool("mc.client.mouse.move", "Move the cursor on the current screen (GUI coordinates) and hover there; "
+            + "later mouse clicks and scrolls on this screen use it", List.of(moveX, moveY),
+            args -> bridge.submit(() -> bridge.mouseMove(moveX.get(args), moveY.get(args))).get(10, TimeUnit.SECONDS)));
+        Param<Double> scrollAmount = Param.number("amount", "wheel steps, positive scrolls up").or(1.0);
+        registry.register(tool("mc.client.mouse.scroll", "Scroll the mouse wheel: a screen scrolls at the cursor (or x/y), "
+            + "in the world it changes the hotbar slot", List.of(scrollAmount, atX, atY),
+            args -> bridge.submit(() -> bridge.mouseScroll(scrollAmount.get(args), atX.get(args), atY.get(args))).get(10, TimeUnit.SECONDS)));
+        registry.register(read(tool("mc.client.mouse.state", "Cursor position in GUI coordinates, whether the mouse is grabbed and which buttons are down",
+            args -> bridge.submit(bridge::mouseState).get(10, TimeUnit.SECONDS))));
+
         registry.register(read(tool("mc.client.ticks.wait", "Wait client ticks", List.of(TICKS), args -> {
             long ticks = TICKS.get(args);
             bridge.waitTicks(ticks);
@@ -159,6 +239,20 @@ public final class BuiltinClientTools {
         Param<Double> lookX = Param.number("x", "target X").required();
         Param<Double> lookY = Param.number("y", "target Y").required();
         Param<Double> lookZ = Param.number("z", "target Z").required();
+        Param<Double> dYaw = Param.number("yaw", "degrees to turn right (negative: left)").or(0.0);
+        Param<Double> dPitch = Param.number("pitch", "degrees to turn down (negative: up)").or(0.0);
+        registry.register(tool("mc.client.player.turn", "Turn the camera by a yaw/pitch delta, like moving the mouse in the world",
+            List.of(dYaw, dPitch, ACTION_TIMEOUT), args -> bridge.turn(dYaw.get(args).floatValue(), dPitch.get(args).floatValue())));
+        registry.register(read(tool("mc.client.player.state", "Player health, food, saturation, armor, air, experience, effects, game mode, "
+            + "held items, position and flags (dead, on ground, in water, using item ...)",
+            args -> bridge.submit(bridge::playerState).get(10, TimeUnit.SECONDS))));
+        registry.register(tool("mc.client.player.respawn", "Respawn after death and close the death screen",
+            args -> bridge.submit(bridge::respawn).get(10, TimeUnit.SECONDS)));
+        Param<Integer> entityId = Param.integer("id", "entity id from entities.nearby or target").required();
+        registry.register(destructive(tool("mc.client.entity.attack", "Turn to an entity and attack it through the normal client path",
+            List.of(entityId), args -> bridge.submit(() -> bridge.attackEntity(entityId.get(args))).get(10, TimeUnit.SECONDS))));
+        registry.register(tool("mc.client.entity.interact", "Turn to an entity and right-click it: trade, ride, shear, milk, leash, open a chest boat ...",
+            List.of(entityId, HAND), args -> bridge.submit(() -> bridge.interactEntity(entityId.get(args), HAND.get(args))).get(10, TimeUnit.SECONDS)));
         registry.register(tool("mc.client.player.look_at", "Rotate player to look at a world position", List.of(lookX, lookY, lookZ, ACTION_TIMEOUT),
             args -> bridge.lookAt(lookX.get(args), lookY.get(args), lookZ.get(args))));
         registry.register(tool("mc.client.player.use_item", "Use the currently held item with main hand or offhand", List.of(HAND, ACTION_TIMEOUT),
@@ -312,8 +406,13 @@ public final class BuiltinClientTools {
         Param<Integer> hotbarSlot = Param.integer("slot", "hotbar slot 0-8").or(0).alias("index");
         registry.register(tool("mc.client.hotbar.select", "Select a hotbar slot by zero-based index", List.of(hotbarSlot),
             args -> bridge.submit(() -> bridge.selectHotbarSlot(hotbarSlot.get(args))).get(10, TimeUnit.SECONDS)));
+        Param<String> equipHand = Param.oneOf("hand", "which hand", "main", "offhand").or("main");
+        registry.register(tool("mc.client.inventory.equip", "Put an item from anywhere in the inventory into the hand: selects it when it is "
+            + "on the hotbar, otherwise swaps it into the selected hotbar slot (or the offhand)", List.of(ITEM, equipHand),
+            args -> bridge.submit(() -> bridge.equipItem(ITEM.get(args), equipHand.get(args))).get(10, TimeUnit.SECONDS)));
         registry.register(read(tool("mc.client.container.state", "Get current player container/menu state", args -> bridge.submit(bridge::containerState).get(10, TimeUnit.SECONDS))));
-        Param<String> clickTypeParam = Param.oneOf("clickType", "slot click kind", "PICKUP", "QUICK_MOVE", "THROW").or("PICKUP");
+        Param<String> clickTypeParam = Param.oneOf("clickType", "slot click kind; SWAP swaps the slot with hotbar slot <button> (0-8, 40 = offhand), "
+            + "PICKUP_ALL collects matching items onto the cursor, CLONE is creative middle-click", "PICKUP", "QUICK_MOVE", "THROW", "SWAP", "PICKUP_ALL", "CLONE").or("PICKUP");
         registry.register(tool("mc.client.container.click", "Click a container slot using the normal client interaction path", List.of(SLOT, BUTTON, clickTypeParam), args -> {
             int slot = slot(args);
             int button = BUTTON.get(args);

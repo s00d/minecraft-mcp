@@ -33,6 +33,18 @@ public final class Images {
         return new Png(Base64.getEncoder().encodeToString(png), width, scaled);
     }
 
+    /** A contact sheet: what went where, and the PNG. */
+    public record Sheet(byte[] png, int width, int height, int cellWidth, int cellHeight) {
+    }
+
+    /**
+     * Lays {@code files} out row by row on a {@code columns} x {@code rows} sheet, each one fitted into its cell
+     * with its aspect kept; cells past the last file stay empty. A cellHeight of 0 follows the first picture's aspect.
+     */
+    public static Sheet grid(java.util.List<Path> files, int columns, int rows, int cellWidth, int cellHeight, int gap) throws IOException {
+        return Scaler.grid(files, columns, rows, cellWidth, cellHeight, gap);
+    }
+
     /** From the PNG header (IHDR), so it needs no java.desktop. */
     static int width(byte[] png) {
         if (png.length < 24 || png[12] != 'I' || png[13] != 'H' || png[14] != 'D' || png[15] != 'R') return -1;
@@ -55,12 +67,50 @@ public final class Images {
             if (image == null || image.getWidth() <= maxWidth) return png;
             int width = image.getWidth(), height = image.getHeight();
             int outHeight = Math.max(1, height * maxWidth / width);
-            int[] source = image.getRGB(0, 0, width, height, null, 0, width);
-            int[] target = new int[maxWidth * outHeight];
-            for (int y = 0; y < outHeight; y++) {
-                int y0 = y * height / outHeight, y1 = Math.max(y0 + 1, (y + 1) * height / outHeight);
-                for (int x = 0; x < maxWidth; x++) {
-                    int x0 = x * width / maxWidth, x1 = Math.max(x0 + 1, (x + 1) * width / maxWidth);
+            int[] target = resize(image.getRGB(0, 0, width, height, null, 0, width), width, height, maxWidth, outHeight);
+            return encode(target, maxWidth, outHeight);
+        }
+
+        static Sheet grid(java.util.List<Path> files, int columns, int rows, int cellWidth, int cellHeight, int gap) throws IOException {
+            int cells = columns * rows;
+            int cellH = cellHeight;
+            int sheetW = columns * cellWidth + (columns - 1) * gap;
+            int[] sheet = null;
+            int sheetH = 0;
+            for (int i = 0; i < Math.min(cells, files.size()); i++) {
+                // one picture decoded at a time, so a large sheet never holds every full-size screenshot at once
+                var image = javax.imageio.ImageIO.read(files.get(i).toFile());
+                if (image == null) throw new IOException("not an image: " + files.get(i));
+                int w = image.getWidth(), h = image.getHeight();
+                if (sheet == null) {
+                    if (cellH <= 0) cellH = Math.max(1, cellWidth * h / w);
+                    sheetH = rows * cellH + (rows - 1) * gap;
+                    sheet = new int[sheetW * sheetH];
+                    java.util.Arrays.fill(sheet, BACKGROUND);
+                }
+                double fit = Math.min((double) cellWidth / w, (double) cellH / h);
+                int tw = Math.max(1, (int) Math.round(w * Math.min(1.0, fit)));
+                int th = Math.max(1, (int) Math.round(h * Math.min(1.0, fit)));
+                int[] cell = resize(image.getRGB(0, 0, w, h, null, 0, w), w, h, tw, th);
+                int left = (i % columns) * (cellWidth + gap) + (cellWidth - tw) / 2;
+                int top = (i / columns) * (cellH + gap) + (cellH - th) / 2;
+                for (int y = 0; y < th; y++) System.arraycopy(cell, y * tw, sheet, (top + y) * sheetW + left, tw);
+            }
+            if (sheet == null) throw new IOException("no screenshots to put on the sheet");
+            return new Sheet(encode(sheet, sheetW, sheetH), sheetW, sheetH, cellWidth, cellH);
+        }
+
+        /** Dark grey: empty cells and the gaps between them. */
+        private static final int BACKGROUND = 0x202020;
+
+        /** Box filter (area average) to tw x th; upscaling just repeats pixels. */
+        static int[] resize(int[] source, int width, int height, int tw, int th) {
+            if (tw == width && th == height) return source;
+            int[] target = new int[tw * th];
+            for (int y = 0; y < th; y++) {
+                int y0 = y * height / th, y1 = Math.max(y0 + 1, (y + 1) * height / th);
+                for (int x = 0; x < tw; x++) {
+                    int x0 = x * width / tw, x1 = Math.max(x0 + 1, (x + 1) * width / tw);
                     long r = 0, g = 0, b = 0;
                     for (int sy = y0; sy < y1; sy++) {
                         for (int sx = x0; sx < x1; sx++) {
@@ -71,13 +121,17 @@ public final class Images {
                         }
                     }
                     long n = (long) (y1 - y0) * (x1 - x0);
-                    target[y * maxWidth + x] = (int) ((r / n) << 16 | (g / n) << 8 | (b / n));
+                    target[y * tw + x] = (int) ((r / n) << 16 | (g / n) << 8 | (b / n));
                 }
             }
-            var scaled = new java.awt.image.BufferedImage(maxWidth, outHeight, java.awt.image.BufferedImage.TYPE_INT_RGB);
-            scaled.setRGB(0, 0, maxWidth, outHeight, target, 0, maxWidth);
+            return target;
+        }
+
+        static byte[] encode(int[] rgb, int width, int height) throws IOException {
+            var image = new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            image.setRGB(0, 0, width, height, rgb, 0, width);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            javax.imageio.ImageIO.write(scaled, "png", out);
+            javax.imageio.ImageIO.write(image, "png", out);
             return out.toByteArray();
         }
     }

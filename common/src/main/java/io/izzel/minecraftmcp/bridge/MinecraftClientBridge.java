@@ -42,6 +42,14 @@ public interface MinecraftClientBridge extends MinecraftBridge {
     ClientSnapshot snapshot();
 
     default <T> FutureResult<T> action(Supplier<T> supplier) {
+        // already on the client thread (a script's sync block): run now, queuing it would wait for ourselves
+        if (isOnClientThread()) {
+            try {
+                return FutureResult.completed(supplier.get(), this::execute);
+            } catch (RuntimeException e) {
+                return FutureResult.failed(e, this::execute);
+            }
+        }
         return FutureResult.supply(this::execute, this::execute, supplier::get);
     }
 
@@ -146,6 +154,58 @@ public interface MinecraftClientBridge extends MinecraftBridge {
         throw new UnsupportedOperationException("Screen widget clicking is not implemented by " + loader());
     }
 
+    /**
+     * A mouse click (left, right or middle) at the cursor. On a screen it presses and releases the button at
+     * the cursor, or at x/y when given; in the world it is the game's own attack / use / pick-block click on
+     * whatever the crosshair points at, handled on the next client tick.
+     */
+    default Map<String, Object> mouseClick(String button, Double x, Double y) {
+        throw new UnsupportedOperationException("Mouse input is not implemented by " + loader());
+    }
+
+    /** Holds a mouse button for some ticks: keeps breaking the targeted block, keeps using the item, drags on a screen. */
+    default FutureResult<Map<String, Object>> mouseHold(String button, long ticks, Double x, Double y) {
+        throw new UnsupportedOperationException("Mouse input is not implemented by " + loader());
+    }
+
+    /** Moves the cursor used by mouse clicks on the current screen (GUI coordinates) and hovers there. */
+    default Map<String, Object> mouseMove(double x, double y) {
+        throw new UnsupportedOperationException("Mouse input is not implemented by " + loader());
+    }
+
+    /** Scrolls the wheel: a screen scrolls at the cursor; in the world it changes the hotbar slot. */
+    default Map<String, Object> mouseScroll(double amount, Double x, Double y) {
+        throw new UnsupportedOperationException("Mouse input is not implemented by " + loader());
+    }
+
+    default Map<String, Object> mouseState() {
+        throw new UnsupportedOperationException("Mouse input is not implemented by " + loader());
+    }
+
+    /** Health, food, experience, effects, game mode and the like of the client player. */
+    default Map<String, Object> playerState() {
+        throw new UnsupportedOperationException("Player state is not implemented by " + loader());
+    }
+
+    /** Attacks an entity by its network id through the normal client path (turns to it first). */
+    default Map<String, Object> attackEntity(int id) {
+        throw new UnsupportedOperationException("Entity attack is not implemented by " + loader());
+    }
+
+    /** Right-clicks an entity by its network id: trade, ride, shear, leash ... (turns to it first). */
+    default Map<String, Object> interactEntity(int id, String hand) {
+        throw new UnsupportedOperationException("Entity interaction is not implemented by " + loader());
+    }
+
+    default Map<String, Object> respawn() {
+        throw new UnsupportedOperationException("Respawn is not implemented by " + loader());
+    }
+
+    /** Turns the camera by a yaw/pitch delta, like moving the mouse in the world. */
+    default FutureResult<Map<String, Object>> turn(float yaw, float pitch) {
+        throw new UnsupportedOperationException("Turning is not implemented by " + loader());
+    }
+
     default Map<String, Object> disconnectState() {
         throw new UnsupportedOperationException("Disconnect state is not implemented by " + loader());
     }
@@ -205,6 +265,11 @@ public interface MinecraftClientBridge extends MinecraftBridge {
 
     default Map<String, Object> clickContainer(int slot, int button, String clickType) {
         throw new UnsupportedOperationException("Container click is not implemented by " + loader());
+    }
+
+    /** Moves {@code item} into the main hand (selecting or swapping into the hotbar) or the offhand. */
+    default Map<String, Object> equipItem(String item, String hand) {
+        throw new UnsupportedOperationException("Equipping items is not implemented by " + loader());
     }
 
     default Map<String, Object> closeContainer() {

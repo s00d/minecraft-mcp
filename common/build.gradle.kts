@@ -26,6 +26,8 @@ dependencies {
     if (!unobfuscated) "mappings"(project.the<LoomGradleExtensionAPI>().officialMojangMappings())
     // Minecraft's classes carry Fabric Loader's @Environment annotations; without it javac warns on EnvType.
     compileOnly("net.fabricmc:fabric-loader:${property("fabric_loader_version")}")
+    // the annotations of the client mixin; every loader ships Mixin at runtime
+    compileOnly("net.fabricmc:sponge-mixin:0.17.5+mixin.0.8.7")
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
 }

@@ -86,6 +86,22 @@ public final class ClientCompat {
         *///?}
     }
 
+    public static boolean mouseReleased(Screen screen, double x, double y, int button) {
+        //? if >=1.21.9 {
+        return screen.mouseReleased(new MouseButtonEvent(x, y, new MouseButtonInfo(button, 0)));
+        //?} else {
+        /*return screen.mouseReleased(x, y, button);
+        *///?}
+    }
+
+    /** The real mouse cursor in GUI (scaled) coordinates. */
+    public static double[] cursor(Minecraft mc) {
+        var window = mc.getWindow();
+        double scaleX = (double) window.getGuiScaledWidth() / Math.max(1, window.getScreenWidth());
+        double scaleY = (double) window.getGuiScaledHeight() / Math.max(1, window.getScreenHeight());
+        return new double[] {mc.mouseHandler.xpos() * scaleX, mc.mouseHandler.ypos() * scaleY};
+    }
+
     /**
      * Reads the main framebuffer; call on the client thread. From 1.21.5 the read-back is asynchronous and
      * {@code done} runs on a later frame, so never block the client thread waiting for it.
@@ -107,6 +123,18 @@ public final class ClientCompat {
         /*mc.player.swing(hand, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
         *///?} else {
         mc.player.swing(hand);
+        //?}
+    }
+
+    /** Right-clicks an entity the way vanilla's use key does (26.1 merged interactAt into interact). */
+    public static net.minecraft.world.InteractionResult interactEntity(Minecraft mc, net.minecraft.world.entity.Entity entity,
+                                                                       net.minecraft.world.phys.EntityHitResult hit,
+                                                                       net.minecraft.world.InteractionHand hand) {
+        //? if >=26.1 {
+        /*return mc.gameMode.interact(mc.player, entity, hit, hand);
+        *///?} else {
+        var result = mc.gameMode.interactAt(mc.player, entity, hit, hand);
+        return result.consumesAction() ? result : mc.gameMode.interact(mc.player, entity, hand);
         //?}
     }
 

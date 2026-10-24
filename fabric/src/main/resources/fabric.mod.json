@@ -12,6 +12,7 @@
     "client": ["io.izzel.minecraftmcp.fabric.FabricMinecraftMcpEntrypoint"],
     "server": ["io.izzel.minecraftmcp.fabric.FabricMinecraftMcpServerEntrypoint"]
   },
+  "mixins": ["minecraft_mcp.mixins.json"],
   "depends": {
     "fabricloader": ">=0.18.4",
     "fabric-api": "*",
