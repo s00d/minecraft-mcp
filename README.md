@@ -125,17 +125,19 @@ An overview:
 |---|---|
 | Client state | `mc.client.state` (in world, screen class and title, `loading`, player, position), `screen.current`, `screen.state` (widgets with ids, text, positions), `world.snapshot`, `vehicle.state` |
 | Waiting | `mc.client.condition.wait` (expression such as `client.inWorld == true`), `ticks.wait` (real client ticks), `chat.wait`, `connection.wait_disconnect`; `wait: true` on `world.join`, `world.leave`, `connection.connect` |
-| Screens and input | `screen.widget.click`, `screen.click.at`, `screen.text.type`, `keyboard.press`, `keyboard.hold`, `screenshot.take` (`inline: true` returns the image), `window` (hide or show the game window) |
+| Screens and input | `screen.widget.click`, `screen.click.at`, `screen.text.type`, `keyboard.press`, `keyboard.hold`, `screenshot.take` (`inline: true` returns the image), `screenshot.grid` (the newest shots on one contact sheet, N x M), `window` (hide or show the game window) |
+| Mouse | `mouse.click` (left/right/middle at the cursor: on a screen a press and release, in the world the game's own attack / use / pick-block on the crosshair target), `mouse.hold` (keep breaking or using; works with an unfocused window), `mouse.move`, `mouse.scroll` (hotbar in the world), `mouse.state` |
 | Worlds and servers | `world.join` (creates a flat or normal test world), `world.leave`, `connection.connect`, `connection.state`, `connection.sync` |
 | Chat and commands | `chat.send`, `chat.read` (`since` cursor, `contains`/`regex`, paged), `chat.wait`, `command.run`, `command.suggest` |
-| Player | `player.look`, `look_at`, `swing`, `jump`, `use_item`, `attack.block`, `destroy.block`, `drop`, `block.interact`, `movement.waypoints` |
+| Player | `player.state` (health, food, armor, air, xp, effects, game mode, held items, flags), `player.look`, `look_at`, `turn`, `swing`, `jump`, `use_item`, `attack.block`, `destroy.block`, `drop`, `respawn`, `block.interact`, `entity.attack`, `entity.interact` (trade, ride, shear ...), `movement.waypoints` |
 | Around the player | `mc.client.block.state`, `target` (what the crosshair hits), `entities.nearby`, `blocks.find` |
-| Inventory | `inventory.state`, `inventory.find`, `inventory.count`, `inventory.selected`, `hotbar.select`, `container.state`, `container.click`, `container.quick_move`, `container.drop`, `container.close` |
+| Inventory | `inventory.state`, `inventory.find`, `inventory.count`, `inventory.selected`, `inventory.equip` (any slot into the hand), `hotbar.select`, `container.state`, `container.click`, `container.quick_move`, `container.drop`, `container.close` |
 | Packets | `packet.recording.start/stop/clear/status`, `packet.dump`, `packet.wait` (filters by direction, name, class, expression) |
 | Time and speed | `mc.server.time` (read, set or move the day time), `mc.server.tick` (tick rate, freeze, step, sprint: fast-forward thousands of ticks and wait for them) |
 | Mod development | `mc.mods.list`, `mc.registry.list` (what is registered, filtered by your mod id), `mc.crash.latest`, `mc.client.log.tail` / `mc.server.log.tail` (`contains: "ERROR"`), `mc.server.reload` (data packs), `mc.client.resources.reload` (resource packs, like F3+T) |
 | Server | `mc.server.state`, `players`, `player.state`, `player.inventory`, `connection.list`, `world.list`, `world.snapshot`, `block.state`, `block.set`, `entity.query`, `chunk.state`, `tick.stats`, `ticks.wait`, `condition.wait`, `command.run` (captures output), `shutdown` |
 | Schematics | `mc.server.schematic.export`, `mc.server.schematic.paste`, `mc.schematic.info` (Sponge v3, with block entities, entities and biomes) |
+| Scripts | `mc.script.run` (JavaScript run inside the game: every tool as `mc.client.player.state()`, loops, conditions, `wait`, `until`; one round trip for a whole chain, or `background: true`), `script.status`, `script.stop`, `script.save` / `list` / `get` / `delete`. See [docs/scripts.md](docs/scripts.md) |
 | Many calls at once | `mc.batch` (a list of `{tool, args}`, one round trip, stops at the first failure unless `keepGoing`) |
 | Scenarios | `mc.scenario.batch.run`, `mc.scenario.report` |
 | Peer | `mc.remote.call`, `mc.remote.state` (run a tool on the server from the client, or on a player's client from the server) |
@@ -277,6 +279,7 @@ A manual run (`workflow_dispatch`) only builds and uploads the jars as an artifa
 | [protocol.md](docs/protocol.md) | Transport, protocol versions, discovery files, sides, access control |
 | [configuration.md](docs/configuration.md) | Settings and how they resolve |
 | [agent-usage.md](docs/agent-usage.md) | Connecting an agent |
+| [scripts.md](docs/scripts.md) | JavaScript micro scripts: `mc.script.run` |
 | [scenarios.md](docs/scenarios.md), [scenario-conditions.md](docs/scenario-conditions.md) | Scenario files and condition expressions |
 | [server-tools.md](docs/server-tools.md) | `mc.server.*` |
 | [player-action-tools.md](docs/player-action-tools.md), [inventory-container-tools.md](docs/inventory-container-tools.md) | Player and inventory tools |
