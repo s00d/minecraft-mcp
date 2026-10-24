@@ -116,6 +116,40 @@ public final class ClientCompat {
         *///?}
     }
 
+    /** RGBA bytes of a screenshot image, top row first (1.21.8 exposed the native pointer; 1.21.2 renamed the raw ints). */
+    public static byte[] rgba(NativeImage image) {
+        int size = image.getWidth() * image.getHeight() * 4;
+        byte[] bytes = new byte[size];
+        //? if >=1.21.8 {
+        org.lwjgl.system.MemoryUtil.memByteBuffer(image.getPointer(), size).get(bytes);
+        //?} else if >=1.21.2 {
+        /*java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer().put(image.getPixelsABGR());
+        *///?} else {
+        /*java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer().put(image.getPixelsRGBA());
+        *///?}
+        return bytes;
+    }
+
+    // --- sound (1.21.11 renamed ResourceLocation to Identifier)
+
+    /** The sound event id, e.g. minecraft:entity.pig.ambient. */
+    public static String soundId(net.minecraft.client.resources.sounds.SoundInstance sound) {
+        //? if >=1.21.11 {
+        return sound.getIdentifier().toString();
+        //?} else {
+        /*return sound.getLocation().toString();
+        *///?}
+    }
+
+    /** The background frame rate cap (1.21.2+), or null where the option does not exist. */
+    public static net.minecraft.client.OptionInstance<?> inactivityFpsLimit(Minecraft mc) {
+        //? if >=1.21.2 {
+        return mc.options.inactivityFpsLimit();
+        //?} else {
+        /*return null;
+        *///?}
+    }
+
     // --- player actions (26.3 made the swing animation explicit and moved dropping to the game mode)
 
     public static void swing(Minecraft mc, net.minecraft.world.InteractionHand hand) {

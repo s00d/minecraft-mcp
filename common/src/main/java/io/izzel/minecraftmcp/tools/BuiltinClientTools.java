@@ -136,6 +136,37 @@ public final class BuiltinClientTools {
                 result.put("image", Map.of("mimeType", "image/png", "data", java.util.Base64.getEncoder().encodeToString(sheet.png())));
                 return result;
             })));
+        Param<Map<String, Object>> optionSet = Param.object("set", "options to change, e.g. {\"sound.master\": 0, \"pauseOnLostFocus\": false, \"fov\": 90}");
+        Param<Boolean> optionSave = Param.bool("save", "also write options.txt, so the change survives a restart").or(false);
+        registry.register(tool("mc.client.options", "Read client options, or change some with set: fov, renderDistance, simulationDistance, "
+            + "framerateLimit, inactivityFpsLimit, gamma, sensitivity, guiScale, autoJump, enableVsync, fullscreen, showSubtitles, "
+            + "pauseOnLostFocus (false keeps a singleplayer world running in the background), particles, cloudStatus, chatVisibility, "
+            + "narrator, bobView, entityShadows, smoothCamera, and the volume of every sound channel 0..1: sound.master, sound.music, "
+            + "sound.record, sound.weather, sound.block, sound.hostile, sound.neutral, sound.player, sound.ambient, sound.voice ...; "
+            + "set sound.master to 0 to mute. All or nothing: an unknown name or a value out of range changes nothing",
+            List.of(optionSet, optionSave),
+            args -> bridge.submit(() -> bridge.options(optionSet.get(args), optionSave.get(args))).get(10, TimeUnit.SECONDS)));
+        Param<Integer> soundLimit = Param.integer("limit", "max sounds, oldest first").or(50);
+        Param<String> soundContains = Param.string("contains", "only sounds whose id, subtitle or channel contains this");
+        registry.register(read(tool("mc.client.sound.events", "Sounds the client started playing (id, subtitle, channel, position, distance, volume, "
+            + "pitch), newest 500 kept; pass the returned last as since next time", List.of(SINCE, soundContains, soundLimit),
+            args -> bridge.soundEvents(SINCE.get(args), soundContains.get(args), soundLimit.get(args)))));
+        Param<String> videoName = Param.string("name", "file name under videos/ (default: timestamped)").or("");
+        Param<Integer> videoFps = Param.integer("fps", "frames per second, 1-20 (one frame per game tick at most)").or(20);
+        Param<Integer> videoWidth = Param.integer("maxWidth", "scale the video down to this width").or(1280);
+        Param<Long> videoSeconds = Param.longInt("seconds", "stop on its own after this long").or(120L);
+        Param<Boolean> videoAudio = Param.bool("audio", "add the sound track, rebuilt from the sounds the game played").or(true);
+        Param<String> videoFfmpeg = Param.string("ffmpeg", "path to ffmpeg when it is not on the PATH (or set MINECRAFT_MCP_FFMPEG)");
+        registry.register(tool("mc.client.video.start", "Start recording the game window to an mp4 (H.264 through ffmpeg) with its sound "
+            + "track; keeps going across tool calls until video.stop or the seconds limit",
+            List.of(videoName, videoFps, videoWidth, videoSeconds, videoAudio, videoFfmpeg),
+            args -> bridge.videoStart(videoName.get(args), videoFps.get(args), videoWidth.get(args), Math.min(1800, videoSeconds.get(args)),
+                videoAudio.get(args), videoFfmpeg.get(args))));
+        Param<Long> stopTimeout = Param.longInt("timeoutMs", "how long to wait for the file to be finished").or(120_000L);
+        registry.register(tool("mc.client.video.stop", "Stop the recording and return the finished mp4: path, seconds, frames, dropped frames, sounds",
+            List.of(stopTimeout), args -> bridge.videoStop(stopTimeout.get(args))));
+        registry.register(read(tool("mc.client.video.state", "Whether a recording runs, its file, length and frame counts",
+            args -> bridge.videoState())));
 
         registry.register(read(tool("mc.client.log.tail", "Return the tail of the client log, optionally only lines containing some text",
             List.of(LogTail.LINES, LogTail.CONTAINS), args -> LogTail.read(bridge.gameDirectory(), args))));

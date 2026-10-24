@@ -45,9 +45,29 @@ import io.izzel.minecraftmcp.concurrent.TickCounter;
 public abstract class VanillaClientBridge implements MinecraftClientBridge {
     protected final Minecraft mc;
 
+    private final SoundLog soundLog;
+    private final VideoRecorder video;
+
     protected VanillaClientBridge(Minecraft mc) {
         this.mc = java.util.Objects.requireNonNull(mc, "Minecraft client must be available when the MCP endpoint starts");
+        this.soundLog = new SoundLog(mc);
+        this.video = new VideoRecorder(mc, soundLog);
+        mc.execute(() -> mc.getSoundManager().addListener(soundLog));
     }
+
+    public Map<String, Object> options(Map<String, Object> set, boolean save) {
+        if (set == null || set.isEmpty()) return ClientOptions.read(mc);
+        return Map.of("changed", ClientOptions.set(mc, set, save), "saved", save);
+    }
+    public Map<String, Object> soundEvents(long since, String contains, int limit) { return soundLog.read(since, contains, limit); }
+    public Map<String, Object> videoStart(String name, int fps, int maxWidth, long maxSeconds, boolean audio, String ffmpeg) throws Exception {
+        return video.start(gameDirectory().resolve("videos"), name, fps, maxWidth, maxSeconds, audio, ffmpeg);
+    }
+    public Map<String, Object> videoStop(long timeoutMs) throws Exception {
+        requireOffGameThread("finishing a video");
+        return video.stop(timeoutMs);
+    }
+    public Map<String, Object> videoState() { return video.state(); }
 
     /** True when the connected server registered the MCP plugin channel. */
     protected abstract boolean remoteChannelOpen();

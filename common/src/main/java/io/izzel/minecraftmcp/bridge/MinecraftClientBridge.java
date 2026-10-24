@@ -182,6 +182,28 @@ public interface MinecraftClientBridge extends MinecraftBridge {
         throw new UnsupportedOperationException("Mouse input is not implemented by " + loader());
     }
 
+    /** Client options by name (video, controls, sound.<channel> volumes); {@code set} changes some first. */
+    default Map<String, Object> options(Map<String, Object> set, boolean save) {
+        throw new UnsupportedOperationException("Client options are not implemented by " + loader());
+    }
+
+    /** Sounds the client started playing after {@code since}. */
+    default Map<String, Object> soundEvents(long since, String contains, int limit) {
+        throw new UnsupportedOperationException("Sound events are not implemented by " + loader());
+    }
+
+    default Map<String, Object> videoStart(String name, int fps, int maxWidth, long maxSeconds, boolean audio, String ffmpeg) throws Exception {
+        throw new UnsupportedOperationException("Video recording is not implemented by " + loader());
+    }
+
+    default Map<String, Object> videoStop(long timeoutMs) throws Exception {
+        throw new UnsupportedOperationException("Video recording is not implemented by " + loader());
+    }
+
+    default Map<String, Object> videoState() {
+        throw new UnsupportedOperationException("Video recording is not implemented by " + loader());
+    }
+
     /** Health, food, experience, effects, game mode and the like of the client player. */
     default Map<String, Object> playerState() {
         throw new UnsupportedOperationException("Player state is not implemented by " + loader());
