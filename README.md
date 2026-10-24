@@ -126,6 +126,7 @@ An overview:
 | Client state | `mc.client.state` (in world, screen class and title, `loading`, player, position), `screen.current`, `screen.state` (widgets with ids, text, positions), `world.snapshot`, `vehicle.state` |
 | Waiting | `mc.client.condition.wait` (expression such as `client.inWorld == true`), `ticks.wait` (real client ticks), `chat.wait`, `connection.wait_disconnect`; `wait: true` on `world.join`, `world.leave`, `connection.connect` |
 | Screens and input | `screen.widget.click`, `screen.click.at`, `screen.text.type`, `keyboard.press`, `keyboard.hold`, `screenshot.take` (`inline: true` returns the image), `screenshot.grid` (the newest shots on one contact sheet, N x M), `window` (hide or show the game window) |
+| Video, sound, options | `video.start` / `video.stop` / `video.state` (mp4 through ffmpeg, with a sound track rebuilt from the sounds the game played), `sound.events` (what played, where, subtitle), `options` (every sound channel volume, `pauseOnLostFocus`, fov, render distance ...). See [docs/media.md](docs/media.md) |
 | Mouse | `mouse.click` (left/right/middle at the cursor: on a screen a press and release, in the world the game's own attack / use / pick-block on the crosshair target), `mouse.hold` (keep breaking or using; works with an unfocused window), `mouse.move`, `mouse.scroll` (hotbar in the world), `mouse.state` |
 | Worlds and servers | `world.join` (creates a flat or normal test world), `world.leave`, `connection.connect`, `connection.state`, `connection.sync` |
 | Chat and commands | `chat.send`, `chat.read` (`since` cursor, `contains`/`regex`, paged), `chat.wait`, `command.run`, `command.suggest` |
@@ -280,6 +281,7 @@ A manual run (`workflow_dispatch`) only builds and uploads the jars as an artifa
 | [configuration.md](docs/configuration.md) | Settings and how they resolve |
 | [agent-usage.md](docs/agent-usage.md) | Connecting an agent |
 | [scripts.md](docs/scripts.md) | JavaScript micro scripts: `mc.script.run` |
+| [media.md](docs/media.md) | Video recording, sound events, client options |
 | [scenarios.md](docs/scenarios.md), [scenario-conditions.md](docs/scenario-conditions.md) | Scenario files and condition expressions |
 | [server-tools.md](docs/server-tools.md) | `mc.server.*` |
 | [player-action-tools.md](docs/player-action-tools.md), [inventory-container-tools.md](docs/inventory-container-tools.md) | Player and inventory tools |
